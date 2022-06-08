@@ -6,4 +6,13 @@
     <content><![CDATA[<p>一切的起源都要从”Hello World”开始…</p>
 ]]></content>
   </entry>
+  <entry>
+    <title>Hexo博客写作技巧</title>
+    <url>/2022/01/03/hexo-writing-skills/</url>
+    <content><![CDATA[]]></content>
+      <tags>
+        <tag>Hexo</tag>
+        <tag>Markdown</tag>
+      </tags>
+  </entry>
 </search>
