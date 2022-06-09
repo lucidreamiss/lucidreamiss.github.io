@@ -5,14 +5,14 @@
 # Site
 title: 清明梦
 subtitle: '一起变好'
-description: '博客'
+description: '黑夜与白天，与清明梦之间'
 author: 涛桑
 language: zh-CN
 timezone: 'Asia/Shanghai'
 
 # URL
 ## Set your site url here. For example, if you use GitHub Page, set url as 'https://username.github.io/project'
-url: https://lucidreamiss/lucidreamiss.github.io
+url: https://lucidreamiss.github.io/
 permalink: :year/:month/:day/:title/
 permalink_defaults:
 pretty_urls:

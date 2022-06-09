@@ -352,9 +352,9 @@ codeblock:
   highlight_theme: normal
   # Add copy button on codeblock
   copy_button:
-    enable: false
+    enable: true
     # Show text copy result.
-    show_result: false
+    show_result: true
     # Available values: default | flat | mac
     style:
 
@@ -415,8 +415,8 @@ font:
 
   # 标题字体 (h1, h2, h3, h4, h5, h6)
   headings:
-    external: true
-    family: Roboto Slab
+    external: false
+    family: Songti SC
 
   # 文章字体
   posts:
@@ -775,11 +775,13 @@ note:
   #  - modern    bs-callout new (v2-v3) alert style.
   #  - flat      flat callout style with background, like on Mozilla or StackOverflow.
   #  - disabled  disable all CSS styles import of note tag.
-  style: simple
+  style: modern
   icons: false
+  border_radius: 3
   # Offset lighter of background in % for modern and flat styles (modern: -12 | 12; flat: -18 | 6).
   # Offset also applied to label tag variables. This option can work with disabled note tag.
-  light_bg_offset: 0
+  light_bg_offset: -6
+
 
 # Tabs tag
 tabs:

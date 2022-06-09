@@ -88,20 +88,21 @@ $font-family-monospace    = get_font_family('codes'), consolas, Menlo, monospace
 
 
 // Font size
-$font-size-base           = (hexo-config('font.enable') and hexo-config('font.global.size') is a 'unit') ? unit(hexo-config('font.global.size'), em) : 1em;
-$font-size-smallest       = .75em;
-$font-size-smaller        = .8125em;
-$font-size-small          = .875em;
-$font-size-medium         = 1em;
-$font-size-large          = 1.125em;
-$font-size-larger         = 1.25em;
-$font-size-largest        = 1.5em;
+$font-size-base           = 14px;
+$font-size-base           = unit(hexo-config('font.global.size'), px) if hexo-config('font.global.size') is a 'unit';           
+$font-size-smallest       = $font-size-base - 6px;
+$font-size-smaller        = $font-size-base - 4px;
+$font-size-small          = $font-size-base - 2px;
+$font-size-medium         = $font-size-base;
+$font-size-large          = $font-size-base + 2px;
+$font-size-larger         = $font-size-base + 4px;
+$font-size-largest        = $font-size-base + 6px;
 
 
 // Headings font size
-$font-size-headings-step  = .125em;
-$font-size-headings-base  = (hexo-config('font.enable') and hexo-config('font.headings.size') is a 'unit') ? unit(hexo-config('font.headings.size'), em) : 1.625em;
-
+$font-size-headings-step  = 2px;
+$font-size-headings-base = 24px;
+$font-size-headings-base    = unit(hexo-config('font.headings.size'), px) if hexo-config('font.headings.size') is a 'unit';
 
 // Global line height
 $line-height-base         = 2;
@@ -120,8 +121,14 @@ $zindex-5       = 1500;
 
 // Table
 // --------------------------------------------------
+$table-width                    = 100%;
 $table-border-color             = $grey-lighter;
-$table-font-size                = $font-size-small;
+$table-font-size                = $font-size-base;
+$table-content-alignment        = left;
+$table-content-vertical         = middle;
+$table-th-font-weight           = 700;
+$table-cell-padding             = 8px;
+$table-cell-border-right-color  = $gainsboro;
 $table-cell-border-bottom-color = $grey-lighter;
 $table-row-odd-bg-color         = #f9f9f9;
 $table-row-odd-bg-color-dark    = #282828;
@@ -132,6 +139,8 @@ $table-row-hover-bg-color-dark  = #363636;
 // Code & Code Blocks
 // --------------------------------------------------
 $code-font-family               = $font-family-monospace;
+$code-font-size                 = 14px;
+$code-font-size                 = unit(hexo-config('font.codes.size'), px) if hexo-config('font.codes.size') is a 'unit';
 $code-foreground                = $black-light;
 $code-background                = $gainsboro;
 
@@ -151,6 +160,8 @@ $btn-default-hover-color               = $black-deep;
 $btn-default-hover-color-dark          = $text-color-dark;
 $btn-default-hover-border-color        = $black-deep;
 $btn-default-hover-border-color-dark   = $grey-dim;
+$btn-default-font-size          = 14px;
+$btn-default-border-width       = 2px;
 
 
 // Pagination
