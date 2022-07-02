@@ -9,8 +9,6 @@ description: 本文介绍Hexo博客的写作技巧。
 
 Markdown作为一种标记语言，语法简单且易阅读易编写，可完全脱离鼠标写出样式丰富的文档，是日常工作以及写技术博客必备的技能之一。
 
-<!--more-->
-
 | 元素     | Markdown语法                              | 效果预览                                               |
 | :--------: | :-----------------------------------------: | :-------------- |
 | 标题     | `# 标题1`<br>`## h2`<br>`### h3`          | <div style="font-weight: bold"><div style="font-size: 24px">标题一</div><div style="font-size: 22px">标题二</div><div style="font-size: 20px">标题三</div></div>  |
