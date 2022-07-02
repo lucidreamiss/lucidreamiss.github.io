@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png">
+  <link rel="mask-icon" href="/favicon.png" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+<link rel="stylesheet" href="//fonts.googleapis.com/css?family=Monda:300,300italic,400,400italic,700,700italic&display=swap&subset=latin,latin-ext">
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+  <link rel="stylesheet" href="/lib/pace/pace-theme-minimal.min.css">
+  <script src="/lib/pace/pace.min.js"></script>
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"lucidreamiss.github.io","root":"/","scheme":"Mist","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":true,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":true,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="你知道&#96;a &#x3D; 1 + 2&#96;在CPU是怎么执行的吗？">
+<meta property="og:type" content="article">
+<meta property="og:title" content="CPU是怎么运行程序的？">
+<meta property="og:url" content="https://lucidreamiss.github.io/2022/01/23/how-cpu-execute/index.html">
+<meta property="og:site_name" content="清明梦">
+<meta property="og:description" content="你知道&#96;a &#x3D; 1 + 2&#96;在CPU是怎么执行的吗？">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/how-to-execute-turing.webp">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/Von_Neumann_architecture.svg">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E5%86%AF%E8%AF%BA%E4%BE%9D%E6%9B%BC%E6%A8%A1%E5%9E%8B.webp">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/CPU%E6%89%A7%E8%A1%8C%E7%A8%8B%E5%BA%8F.webp">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp">
+<meta property="article:published_time" content="2022-01-23T03:27:37.000Z">
+<meta property="article:modified_time" content="2022-01-23T03:27:37.000Z">
+<meta property="article:author" content="涛桑">
+<meta property="article:tag" content="操作系统">
+<meta property="article:tag" content="CPU">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/how-to-execute-turing.webp">
+
+<link rel="canonical" href="https://lucidreamiss.github.io/2022/01/23/how-cpu-execute/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>CPU是怎么运行程序的？ | 清明梦</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">清明梦</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">一起变好</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/01/23/how-cpu-execute/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          CPU是怎么运行程序的？
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-01-23 11:27:37" itemprop="dateCreated datePublished" datetime="2022-01-23T11:27:37+08:00">2022-01-23</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.9k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 分钟</span>
+            </span>
+            <div class="post-description">你知道`a = 1 + 2`在CPU是怎么执行的吗？</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <p>你知道<code>a = 1 + 2</code>在CPU是怎么执行的吗？32位和64位的操作系统有什么区别？64位的软件可以在32位的操作系统上面运行吗？</p>
+<h2 id="图灵机的工作方式"><a href="#图灵机的工作方式" class="headerlink" title="图灵机的工作方式"></a>图灵机的工作方式</h2><p>要想了解程序是怎么执行的，我们先来看下图灵机的工作方式。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/how-to-execute-turing.webp" alt="图灵机"></p>
+<p>图灵的基本思想是用机器来模拟人们用纸笔进行数学运算的过程，他把这样的过程看作下列两种简单的动作：<br>1、在纸上写上或擦除某个符号；<br>2、把注意力从纸的一个位置移动到另一个位置。<br>而在每个阶段，人要决定下一步的动作，依赖于 (1) 此人当前所关注的纸上某个位置的符号和(2) 此人当前思维的状态。</p>
+<p>那么我们来看下图灵机是怎么执行<code>1 + 2</code>的。</p>
+<ul>
+<li>首先，在纸上写入「1、2、+」这三个字符，并读写头停放在1字符对应的格子上。</li>
+<li>接着，读写头将1写入到存储设备中</li>
+<li>读写头移动到下一格，读取2到存储设备中</li>
+<li>读写头移动到下一格，读取+，判断加未运算符指令，变将存储设备中的1和2相加，得到3，并将3写入到存储设备中</li>
+<li>读写头移动到下一格，将存储设备中的3写入到此格。</li>
+</ul>
+<p>现代计算机的工作方式与图灵机执行<code>1+2</code>的工作方式基本一致，我们来看下冯诺依曼模型。</p>
+<h2 id="冯诺依曼模型"><a href="#冯诺依曼模型" class="headerlink" title="冯诺依曼模型"></a>冯诺依曼模型</h2><p>冯诺依曼遵循图灵机的设计，使用电子元件构造计算机，约定用二进制进行计算和存储，并定义了<em>冯诺依曼模型</em>。</p>
+<p>冯诺依曼模型定义了计算机的基本结构有五个部分，<strong>运算器</strong>、<strong>控制器</strong>、 <strong>存储器</strong>、<strong>输入设备</strong>、<strong>输出设备</strong>。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/Von_Neumann_architecture.svg" alt="冯诺依曼模型"></p>
+<p>计算器、控制器位于CPU中，并使用总线与存储器和输入/输出设备完成交互。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E5%86%AF%E8%AF%BA%E4%BE%9D%E6%9B%BC%E6%A8%A1%E5%9E%8B.webp" alt="冯诺依曼模型"></p>
+<h3 id="寄存器是什么"><a href="#寄存器是什么" class="headerlink" title="寄存器是什么"></a>寄存器是什么</h3><p>看上面的冯诺依曼模型中，CPU中有个寄存器的角色，他是用来干嘛的呢？我们知道CPU中放着控制单元与逻辑运算单元，而数据需要依靠总线与存储单元、输入输出单元交互来获得，依靠总线传输数据会增加运算时间，那么就需要将正在计算的数据存放到寄存器中，通过减少与总线的交互来提升计算速度。根据存储的数据不同，常见的寄存器有以下几种。</p>
+<ul>
+<li>通用寄存器，存放进行运算的数据。</li>
+<li>程序计数器，存放CPU要执行的下一条指令的地址。</li>
+<li>指令寄存器，存放程序计数器指向的指令。</li>
+</ul>
+<h3 id="总线"><a href="#总线" class="headerlink" title="总线"></a>总线</h3><p>总线用于CPU与内存以及其他设备之前的通信。分为以下三种：</p>
+<ul>
+<li>地址总线，用于指定CPU将要操作的内存地址。</li>
+<li>数据总线，用于读写内存的数据。</li>
+<li>控制总线，用于发送和接收信号，比如中断、设备复位等。CPU收到信号后自然进行相应，也需要控制总线。</li>
+</ul>
+<p>当CPU读写内存时，首先通过<strong>地址总线</strong>来指定内存地址，然后通过<strong>控制总线</strong>来控制读或写命令，最后通过<strong>数据总线</strong>来传输数据。</p>
+<h2 id="线路位宽与CPU位宽"><a href="#线路位宽与CPU位宽" class="headerlink" title="线路位宽与CPU位宽"></a>线路位宽与CPU位宽</h2><p>CPU通过总线与内存进行交互，那么总线是怎么传输数据的呢？其实就是操作电压，低电压为0，高电压为1，以此来表达二进制数据，从而完成数据传输，那么表示一个11010的信号则需要5条线路并行传输，线路的条数称为位宽，一般也对应CPU位宽。</p>
+<p>CPU想要操作内存地址就需要地址总线。</p>
+<p>假设有线路位宽为5，此时CPU想访问内存地址6，那么则通过地址总线传输00110即可，如果此时CPU想访问128，那么传输啥都没用，位宽为5，寻址范围只能在0-31上，可见，位宽决定了CPU能操作的内存大小，32位CPU只能操作<code>2^32</code>(4G)大的内存。</p>
+<div class="note ">
+            <p>所以不要给32位CPU安装8G内存条哦，4G就够了</p>
+          </div>
+
+<p>线路位宽决定了数据传输的能力，那么CPU位宽呢？</p>
+<p>看冯诺依曼模型可知，CPU放着控制单元与逻辑运算单元，CPU位宽决定了这里的计算能力，32位的CPU没法直接加和两个64位大小的数字，需要分高低位加和再组装，而64位计算机则可以直接对64位数字加和，那么CPU位宽则决定了一次能计算多少字节的数据。</p>
+<ul>
+<li>32位CPU一次可以计算4个字节；</li>
+<li>64位CPU一次可以计算8个字节；</li>
+</ul>
+<div class="note ">
+            <p>如果计算的数额不超过32位，此时32位CPU与64位CPU其实没差别</p>
+          </div>
+
+<h2 id="程序执行的基本过程"><a href="#程序执行的基本过程" class="headerlink" title="程序执行的基本过程"></a>程序执行的基本过程</h2><p>程序实际上是一条条指令，所以程序的运行过程就是把每一条指令一步步的执行起来，负责执行指令的就是CPU。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/CPU%E6%89%A7%E8%A1%8C%E7%A8%8B%E5%BA%8F.webp" alt="程序执行的基本过程"></p>
+<ol>
+<li><p>CPU读取<strong>程序计数器</strong>的值，该值即为指令的内存地址，然后<strong>控制单元</strong>操作<strong>地址总线</strong>指定需要访问的内存地址，接着通知内存准备数据，数据准备好后通过<strong>数据总线</strong>传输给CPU，CPU收到数据后将该指令存放到<strong>指令寄存器</strong>。</p>
+</li>
+<li><p>CPU分析指令寄存器中的指令，确定指令的类型以及参数，若是计算类型，则交由<strong>逻辑运算单元</strong>，若是存储类型，则交由<strong>控制单元</strong>。</p>
+</li>
+<li><p>当该指令执行完成后，<strong>程序计数器</strong>自增，自增大小有位宽决定，如果是32位宽，则自增4。</p>
+</li>
+</ol>
+<p>以上过程不断循环，程序便跑起来了，这个循环过程成为<strong>CPU的指令周期</strong>。</p>
+<h2 id="a-1-2执行具体过程"><a href="#a-1-2执行具体过程" class="headerlink" title="a = 1 + 2执行具体过程"></a>a = 1 + 2执行具体过程</h2><p>CPU可不认识什么a = 1 + 2，想要程序跑起来，首先要将其翻译成汇编语言，此过程称为汇编代码。</p>
+<p>针对汇编代码，我们还需要用汇编器翻译成机器码，即01000101011这样的机器语言，此时才可以交由CPU完成执行。</p>
+<p>汇编分为<code>数据段</code>与<code>指令段</code>，分别存放数据与指令。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="数据段与正文段"></p>
+<p>编译器会把<code>a = 1 + 2</code>翻译成4条指令，存放到正文段中。如图，这 4 条指令被存放到了 0x200 ~ 0x20c 的区域中：</p>
+<ul>
+<li>0x200 的内容是 load 指令将 0x100 地址中的数据 1 装入到寄存器 R0；</li>
+<li>0x204 的内容是 load 指令将 0x104 地址中的数据 2 装入到寄存器 R1；</li>
+<li>0x208 的内容是 add 指令将寄存器 R0 和 R1 的数据相加，并把结果存放到寄存器 R2；</li>
+<li>0x20c 的内容是 store 指令将寄存器 R2 中的数据存回数据段中的 0x108 地址中，这个地址也就是变量 a 内存中的地址；</li>
+</ul>
+<h2 id="指令"><a href="#指令" class="headerlink" title="指令"></a>指令</h2><p>编译期在编译程序时，会构造指令，这个过程成为指令的编码。CPU执行程序时，就会解析指令，这个过程称为指令的解码。</p>
+<p>现代CPU使用流水线方式执行指令，流水线方式将一条指令拆成四个阶段，如下图：</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="流水线执行模式"></p>
+<ol>
+<li><p><strong>Fetch</strong> -&gt; CPU通过程序计数器读取对应的内存地址的指令（获取指令）</p>
+</li>
+<li><p><strong>Decode</strong> -&gt; CPU对指令进行解码（指令译码）</p>
+</li>
+<li><p><strong>Execution</strong> -&gt; CPU执行指令（执行指令）</p>
+</li>
+<li><p><strong>Store</strong> -&gt; 将计算结果存回到寄存器或者将寄存器的值存回内存（数据回写）</p>
+</li>
+</ol>
+<p>上面4个阶段，称为<strong>指令周期</strong>，CPU的工作就是一个接着一个执行，周而复始，事实上，不同的阶段有计算机的不同组件完成：</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="指令周期"></p>
+<ul>
+<li>取指令的阶段，我们的指令是存放在<strong>存储器</strong>里的，实际上，通过程序计数器和指令寄存器取出指令的过程，是由<strong>控制器</strong>操作的；</li>
+<li>指令的译码过程，也是由<strong>控制器</strong>进行的；</li>
+<li>指令执行的过程，无论是进行算术操作、逻辑操作，还是进行数据传输、条件分支操作，都是由<strong>算术逻辑单元操作</strong>的，也就是由<strong>运算器</strong>处理的。但是如果是一个简单的无条件地址跳转，则是直接在<strong>控制器</strong>里面完成的，不需要用到运算器。</li>
+</ul>
+<h3 id="指令的类型"><a href="#指令的类型" class="headerlink" title="指令的类型"></a>指令的类型</h3><p>指令从功能角度划分，可以分为 5 大类：</p>
+<ul>
+<li>数据传输类型的指令，比如 <code>store/load</code> 是寄存器与内存间数据传输的指令，<code>mov</code> 是将一个内存地址的数据移动到另一个内存地址的指令；</li>
+<li>运算类型的指令，比如加减乘除、位运算、比较大小等等，它们最多只能处理两个寄存器中的数据；</li>
+<li>跳转类型的指令，通过修改程序计数器的值来达到跳转执行指令的过程，比如编程中常见的 <code>if-else</code>、<code>swtich-case</code>、函数调用等。</li>
+<li>信号类型的指令，比如发生中断的指令 <code>trap</code>；</li>
+<li>闲置类型的指令，比如指令 <code>nop</code>，执行后 CPU 会空转一个周期</li>
+</ul>
+
+    </div>
+
+    
+    
+    
+
+    
+      <div>
+        <div>
+  
+    <div style="text-align:center;color:#bfbfbf;font-size:16px;">
+      <span>-------- 本文结束 </span>
+      <i class="fa fa-"></i>
+      <span> 感谢阅读 --------</span>
+    </div>
+  
+</div>
+      </div>
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/" rel="tag"><i class="fa fa-tag"></i> 操作系统</a>
+              <a href="/tags/CPU/" rel="tag"><i class="fa fa-tag"></i> CPU</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/01/03/hexo-writing-skills/" rel="prev" title="Hexo博客写作技巧">
+      <i class="fa fa-chevron-left"></i> Hexo博客写作技巧
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%9B%BE%E7%81%B5%E6%9C%BA%E7%9A%84%E5%B7%A5%E4%BD%9C%E6%96%B9%E5%BC%8F"><span class="nav-number">1.</span> <span class="nav-text">图灵机的工作方式</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E5%86%AF%E8%AF%BA%E4%BE%9D%E6%9B%BC%E6%A8%A1%E5%9E%8B"><span class="nav-number">2.</span> <span class="nav-text">冯诺依曼模型</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%AF%84%E5%AD%98%E5%99%A8%E6%98%AF%E4%BB%80%E4%B9%88"><span class="nav-number">2.1.</span> <span class="nav-text">寄存器是什么</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BA%BF"><span class="nav-number">2.2.</span> <span class="nav-text">总线</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BA%BF%E8%B7%AF%E4%BD%8D%E5%AE%BD%E4%B8%8ECPU%E4%BD%8D%E5%AE%BD"><span class="nav-number">3.</span> <span class="nav-text">线路位宽与CPU位宽</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%A8%8B%E5%BA%8F%E6%89%A7%E8%A1%8C%E7%9A%84%E5%9F%BA%E6%9C%AC%E8%BF%87%E7%A8%8B"><span class="nav-number">4.</span> <span class="nav-text">程序执行的基本过程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#a-1-2%E6%89%A7%E8%A1%8C%E5%85%B7%E4%BD%93%E8%BF%87%E7%A8%8B"><span class="nav-number">5.</span> <span class="nav-text">a &#x3D; 1 + 2执行具体过程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%8C%87%E4%BB%A4"><span class="nav-number">6.</span> <span class="nav-text">指令</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%8C%87%E4%BB%A4%E7%9A%84%E7%B1%BB%E5%9E%8B"><span class="nav-number">6.1.</span> <span class="nav-text">指令的类型</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="涛桑"
+      src="/favicon.png">
+  <p class="site-author-name" itemprop="name">涛桑</p>
+  <div class="site-description" itemprop="description">黑夜与白天，与清明梦之间</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">3</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">4</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/lucidreamiss" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;lucidreamiss" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">清明梦</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="站点总字数">11k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="站点阅读时长">10 分钟</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/pangu@4/dist/browser/pangu.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<script src="/live2dw/lib/L2Dwidget.min.js?094cbace49a39548bed64abff5988b05"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"debug":false,"model":{"scale":1,"hHeadPos":0.5,"vHeadPos":0.618,"jsonPath":"/live2dw/assets/koharu.model.json"},"display":{"superSample":2,"hOffset":0,"vOffset":-40,"position":"right","width":150,"height":300},"mobile":{"show":false,"scale":0.2},"react":{"opacityDefault":0.5,"opacityOnHover":0.2},"log":false});</script></body>
+</html>
