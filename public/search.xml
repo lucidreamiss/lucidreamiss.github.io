@@ -1,6 +1,148 @@
 <?xml version="1.0" encoding="utf-8"?>
 <search>
   <entry>
+    <title>CPU Cache</title>
+    <url>/2022/07/02/cpu-cache/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><h2 id="CPU-Cache的数据结构与读取过程"><a href="#CPU-Cache的数据结构与读取过程" class="headerlink" title="CPU Cache的数据结构与读取过程"></a>CPU Cache的数据结构与读取过程</h2><p><code>CPU Cache</code>的数据是从内存中读取过来的，它是以一小块一小块读取数据的，而不是按照单个元素来读取数据的，在CPU Cache中，这样一小块一小块的数据，被称为<code>Cache Line</code> (缓存块)。Cache Line对应到内存的那一小块数据称为<code>Block</code>(内存块)。<br>可以使用以下命令查看<code>Cache Line</code>的大小:</p>
+<figure class="highlight shell"><figcaption><span>linux</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash"><span class="built_in">cat</span> /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size</span></span><br><span class="line">64</span><br></pre></td></tr></table></figure>
+
+<p>64即64字节，即<code>L1 CPU Cache</code>一次载入的数据大小为64字节。<br>比如，有一个<code>int array[100]</code>的数组，当载入array[0]时，也会同时将array[1]~array[15]载入，作为一个Cache Line存入到CPU Cache中，那么当下次再访问这些元素时，就可以直接在内存中读取了，从而大大提高了CPU读取数据的性能。<br>事实上，CPU读取数据的时候，无论数据是否存放到Cache中，CPU都是先访问Cache，只有当Cache中找不到数据后，才会去访问内存，并把内存中的数据读入到Cache中，CPU再从Cache中获取数据，这样的交互方式也满足存储器的层次关系，即每层存储器只与他的上一层和下一层交互。</p>
+<p>那么CPU是怎么知道要访问的内存数据缓存到了CPU Cache里面的呢？</p>
+<h3 id="直接映射Cache"><a href="#直接映射Cache" class="headerlink" title="直接映射Cache"></a>直接映射Cache</h3><p>我们先以直接映射为例，看看CPU Cache的数据结构和访问逻辑。<br><code>直接映射Cache</code>采用的策略就是把<code>Block（内存块）</code>的地址始终映射在一个<code>Cache Line(缓存块)</code>的地址上，映射关系也简单粗暴的使用<strong>取模运算</strong>。<br>如下图，地址为<strong>7</strong>的<code>Cache Line（缓存块）</code>可以映射地址为<strong>7、15、23、31</strong>的<code>Block（内存块）</code></p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/cpu-cache/%E6%B1%82%E6%A8%A1%E6%98%A0%E5%B0%84%E7%AD%96%E7%95%A5.webp" alt="求模运算策略"></p>
+<p>我们也能发现，<code>Block</code>和<code>Cache Line</code>是多对一的，这里就需要特定的标识来区别不同的<code>Block</code>，这里特定的标识被称为<code>Tag(组标记)</code>。<code>Tag</code>会记录当前存储的数据对应哪个<code>Block</code>。除了<code>Tag</code>外，Cache Line中还有两个信息：</p>
+<ul>
+<li><code>Data</code>，从内存中实际加载进来的数据。</li>
+<li><code>Valid bit（有效位）</code>，用来标记对应的CPU Line中的数据是否有效，0表示该数据失效，此时CPU会重新访问内存来加载数据。</li>
+</ul>
+<p>CPU在从CPU Cache读取数据的时候，仅会读取<code>Cache Line</code>中一部分数据，这部分数据片段称为<code>Word（字）</code>，怎么在<code>Cache Line</code>中获取<code>Word</code>呢，则需要一个offset（偏移量）。</p>
+<p>因此，一个内存的访问地址，包括<code>Tag（组标记）、CPU Cache地址、Offset（偏移量）</code>这三种信息，靠这三个信息就可以取得CPU想要的数据。</p>
+<p>那么CPU Cache的数据结构就包括<code>地址、Valid bit（有效位）、Tag（组标记）、Data（数据）</code>组成。</p>
+<h3 id="全相连Cache"><a href="#全相连Cache" class="headerlink" title="全相连Cache"></a>全相连Cache</h3><h3 id="组相连Cache"><a href="#组相连Cache" class="headerlink" title="组相连Cache"></a>组相连Cache</h3><h2 id="CPU-Cache的数据写入过程"><a href="#CPU-Cache的数据写入过程" class="headerlink" title="CPU Cache的数据写入过程"></a>CPU Cache的数据写入过程</h2><p>上面我们聊了CPU是怎么从CPU Cache中读数据的，接下来我们聊下CPU是怎么通过CPU Cache写数据的。</p>
+<p>我们知道，<code>CPU Cache</code>的职责是为<code>内存</code>缓冲数据以便供<code>CPU</code>使用的，当CPU想要向<code>内存</code>写入数据的时候，也必须经过CPU Cache这一层，再由CPU Cache把数据同步到内存里，那么同步时机是什么时候呢？下面有两种方式：</p>
+<ul>
+<li>写直达，把数据直接同时写入到内存与Cache中。<ul>
+<li>当CPU Cache中有数据时，更新CPU Cache的数据，再把CPU Cache的数据同步到内存中。</li>
+<li>当CPU Cache没有数据时，直接把数据写入到内存中。</li>
+</ul>
+</li>
+<li>写回</li>
+</ul>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>CPU</tag>
+        <tag>CPU Cache</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CPU是怎么运行程序的？</title>
+    <url>/2022/01/23/how-cpu-execute/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>你知道<code>a = 1 + 2</code>在CPU是怎么执行的吗？32位和64位的操作系统有什么区别？64位的软件可以在32位的操作系统上面运行吗？</p>
+<h2 id="图灵机的工作方式"><a href="#图灵机的工作方式" class="headerlink" title="图灵机的工作方式"></a>图灵机的工作方式</h2><p>要想了解程序是怎么执行的，我们先来看下图灵机的工作方式。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/how-to-execute-turing.webp" alt="图灵机"></p>
+<p>图灵的基本思想是用机器来模拟人们用纸笔进行数学运算的过程，他把这样的过程看作下列两种简单的动作：<br>1、在纸上写上或擦除某个符号；<br>2、把注意力从纸的一个位置移动到另一个位置。<br>而在每个阶段，人要决定下一步的动作，依赖于 (1) 此人当前所关注的纸上某个位置的符号和(2) 此人当前思维的状态。</p>
+<p>那么我们来看下图灵机是怎么执行<code>1 + 2</code>的。</p>
+<ul>
+<li>首先，在纸上写入「1、2、+」这三个字符，并读写头停放在1字符对应的格子上。</li>
+<li>接着，读写头将1写入到存储设备中</li>
+<li>读写头移动到下一格，读取2到存储设备中</li>
+<li>读写头移动到下一格，读取+，判断加未运算符指令，变将存储设备中的1和2相加，得到3，并将3写入到存储设备中</li>
+<li>读写头移动到下一格，将存储设备中的3写入到此格。</li>
+</ul>
+<p>现代计算机的工作方式与图灵机执行<code>1+2</code>的工作方式基本一致，我们来看下冯诺依曼模型。</p>
+<h2 id="冯诺依曼模型"><a href="#冯诺依曼模型" class="headerlink" title="冯诺依曼模型"></a>冯诺依曼模型</h2><p>冯诺依曼遵循图灵机的设计，使用电子元件构造计算机，约定用二进制进行计算和存储，并定义了<em>冯诺依曼模型</em>。</p>
+<p>冯诺依曼模型定义了计算机的基本结构有五个部分，<strong>运算器</strong>、<strong>控制器</strong>、 <strong>存储器</strong>、<strong>输入设备</strong>、<strong>输出设备</strong>。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/Von_Neumann_architecture.svg" alt="冯诺依曼模型"></p>
+<p>计算器、控制器位于CPU中，并使用总线与存储器和输入/输出设备完成交互。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E5%86%AF%E8%AF%BA%E4%BE%9D%E6%9B%BC%E6%A8%A1%E5%9E%8B.webp" alt="冯诺依曼模型"></p>
+<h3 id="寄存器是什么"><a href="#寄存器是什么" class="headerlink" title="寄存器是什么"></a>寄存器是什么</h3><p>看上面的冯诺依曼模型中，CPU中有个寄存器的角色，他是用来干嘛的呢？我们知道CPU中放着控制单元与逻辑运算单元，而数据需要依靠总线与存储单元、输入输出单元交互来获得，依靠总线传输数据会增加运算时间，那么就需要将正在计算的数据存放到寄存器中，通过减少与总线的交互来提升计算速度。根据存储的数据不同，常见的寄存器有以下几种。</p>
+<ul>
+<li>通用寄存器，存放进行运算的数据。</li>
+<li>程序计数器，存放CPU要执行的下一条指令的地址。</li>
+<li>指令寄存器，存放程序计数器指向的指令。</li>
+</ul>
+<h3 id="总线"><a href="#总线" class="headerlink" title="总线"></a>总线</h3><p>总线用于CPU与内存以及其他设备之前的通信。分为以下三种：</p>
+<ul>
+<li>地址总线，用于指定CPU将要操作的内存地址。</li>
+<li>数据总线，用于读写内存的数据。</li>
+<li>控制总线，用于发送和接收信号，比如中断、设备复位等。CPU收到信号后自然进行相应，也需要控制总线。</li>
+</ul>
+<p>当CPU读写内存时，首先通过<strong>地址总线</strong>来指定内存地址，然后通过<strong>控制总线</strong>来控制读或写命令，最后通过<strong>数据总线</strong>来传输数据。</p>
+<h2 id="线路位宽与CPU位宽"><a href="#线路位宽与CPU位宽" class="headerlink" title="线路位宽与CPU位宽"></a>线路位宽与CPU位宽</h2><p>CPU通过总线与内存进行交互，那么总线是怎么传输数据的呢？其实就是操作电压，低电压为0，高电压为1，以此来表达二进制数据，从而完成数据传输，那么表示一个11010的信号则需要5条线路并行传输，线路的条数称为位宽，一般也对应CPU位宽。</p>
+<p>CPU想要操作内存地址就需要地址总线。</p>
+<p>假设有线路位宽为5，此时CPU想访问内存地址6，那么则通过地址总线传输00110即可，如果此时CPU想访问128，那么传输啥都没用，位宽为5，寻址范围只能在0-31上，可见，位宽决定了CPU能操作的内存大小，32位CPU只能操作<code>2^32</code>(4G)大的内存。</p>
+<div class="note ">
+            <p>所以不要给32位CPU安装8G内存条哦，4G就够了</p>
+          </div>
+
+<p>线路位宽决定了数据传输的能力，那么CPU位宽呢？</p>
+<p>看冯诺依曼模型可知，CPU放着控制单元与逻辑运算单元，CPU位宽决定了这里的计算能力，32位的CPU没法直接加和两个64位大小的数字，需要分高低位加和再组装，而64位计算机则可以直接对64位数字加和，那么CPU位宽则决定了一次能计算多少字节的数据。</p>
+<ul>
+<li>32位CPU一次可以计算4个字节；</li>
+<li>64位CPU一次可以计算8个字节；</li>
+</ul>
+<div class="note ">
+            <p>如果计算的数额不超过32位，此时32位CPU与64位CPU其实没差别</p>
+          </div>
+
+<h2 id="程序执行的基本过程"><a href="#程序执行的基本过程" class="headerlink" title="程序执行的基本过程"></a>程序执行的基本过程</h2><p>程序实际上是一条条指令，所以程序的运行过程就是把每一条指令一步步的执行起来，负责执行指令的就是CPU。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/CPU%E6%89%A7%E8%A1%8C%E7%A8%8B%E5%BA%8F.webp" alt="程序执行的基本过程"></p>
+<ol>
+<li><p>CPU读取<strong>程序计数器</strong>的值，该值即为指令的内存地址，然后<strong>控制单元</strong>操作<strong>地址总线</strong>指定需要访问的内存地址，接着通知内存准备数据，数据准备好后通过<strong>数据总线</strong>传输给CPU，CPU收到数据后将该指令存放到<strong>指令寄存器</strong>。</p>
+</li>
+<li><p>CPU分析指令寄存器中的指令，确定指令的类型以及参数，若是计算类型，则交由<strong>逻辑运算单元</strong>，若是存储类型，则交由<strong>控制单元</strong>。</p>
+</li>
+<li><p>当该指令执行完成后，<strong>程序计数器</strong>自增，自增大小有位宽决定，如果是32位宽，则自增4。</p>
+</li>
+</ol>
+<p>以上过程不断循环，程序便跑起来了，这个循环过程成为<strong>CPU的指令周期</strong>。</p>
+<h2 id="a-1-2执行具体过程"><a href="#a-1-2执行具体过程" class="headerlink" title="a = 1 + 2执行具体过程"></a>a = 1 + 2执行具体过程</h2><p>CPU可不认识什么a = 1 + 2，想要程序跑起来，首先要将其翻译成汇编语言，此过程称为汇编代码。</p>
+<p>针对汇编代码，我们还需要用汇编器翻译成机器码，即01000101011这样的机器语言，此时才可以交由CPU完成执行。</p>
+<p>汇编分为<code>数据段</code>与<code>指令段</code>，分别存放数据与指令。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="数据段与正文段"></p>
+<p>编译器会把<code>a = 1 + 2</code>翻译成4条指令，存放到正文段中。如图，这 4 条指令被存放到了 0x200 ~ 0x20c 的区域中：</p>
+<ul>
+<li>0x200 的内容是 load 指令将 0x100 地址中的数据 1 装入到寄存器 R0；</li>
+<li>0x204 的内容是 load 指令将 0x104 地址中的数据 2 装入到寄存器 R1；</li>
+<li>0x208 的内容是 add 指令将寄存器 R0 和 R1 的数据相加，并把结果存放到寄存器 R2；</li>
+<li>0x20c 的内容是 store 指令将寄存器 R2 中的数据存回数据段中的 0x108 地址中，这个地址也就是变量 a 内存中的地址；</li>
+</ul>
+<h2 id="指令"><a href="#指令" class="headerlink" title="指令"></a>指令</h2><p>编译期在编译程序时，会构造指令，这个过程成为指令的编码。CPU执行程序时，就会解析指令，这个过程称为指令的解码。</p>
+<p>现代CPU使用流水线方式执行指令，流水线方式将一条指令拆成四个阶段，如下图：</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="流水线执行模式"></p>
+<ol>
+<li><p><strong>Fetch</strong> -&gt; CPU通过程序计数器读取对应的内存地址的指令（获取指令）</p>
+</li>
+<li><p><strong>Decode</strong> -&gt; CPU对指令进行解码（指令译码）</p>
+</li>
+<li><p><strong>Execution</strong> -&gt; CPU执行指令（执行指令）</p>
+</li>
+<li><p><strong>Store</strong> -&gt; 将计算结果存回到寄存器或者将寄存器的值存回内存（数据回写）</p>
+</li>
+</ol>
+<p>上面4个阶段，称为<strong>指令周期</strong>，CPU的工作就是一个接着一个执行，周而复始，事实上，不同的阶段有计算机的不同组件完成：</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="指令周期"></p>
+<ul>
+<li>取指令的阶段，我们的指令是存放在<strong>存储器</strong>里的，实际上，通过程序计数器和指令寄存器取出指令的过程，是由<strong>控制器</strong>操作的；</li>
+<li>指令的译码过程，也是由<strong>控制器</strong>进行的；</li>
+<li>指令执行的过程，无论是进行算术操作、逻辑操作，还是进行数据传输、条件分支操作，都是由<strong>算术逻辑单元操作</strong>的，也就是由<strong>运算器</strong>处理的。但是如果是一个简单的无条件地址跳转，则是直接在<strong>控制器</strong>里面完成的，不需要用到运算器。</li>
+</ul>
+<h3 id="指令的类型"><a href="#指令的类型" class="headerlink" title="指令的类型"></a>指令的类型</h3><p>指令从功能角度划分，可以分为 5 大类：</p>
+<ul>
+<li>数据传输类型的指令，比如 <code>store/load</code> 是寄存器与内存间数据传输的指令，<code>mov</code> 是将一个内存地址的数据移动到另一个内存地址的指令；</li>
+<li>运算类型的指令，比如加减乘除、位运算、比较大小等等，它们最多只能处理两个寄存器中的数据；</li>
+<li>跳转类型的指令，通过修改程序计数器的值来达到跳转执行指令的过程，比如编程中常见的 <code>if-else</code>、<code>swtich-case</code>、函数调用等。</li>
+<li>信号类型的指令，比如发生中断的指令 <code>trap</code>；</li>
+<li>闲置类型的指令，比如指令 <code>nop</code>，执行后 CPU 会空转一个周期</li>
+</ul>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>CPU</tag>
+      </tags>
+  </entry>
+  <entry>
     <title>Hello World</title>
     <url>/2021/12/31/hello-world/</url>
     <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>一切的起源都要从”Hello World”开始…</p>
@@ -102,7 +244,7 @@
 <figure class="highlight diff"><figcaption><span>_config.yml</span></figcaption><table><tr><td class="code"><pre><span class="line"> highlight:</span><br><span class="line">   enable: true</span><br><span class="line">   line_number: false</span><br><span class="line"><span class="deletion">-  auto_detect: false</span></span><br><span class="line"><span class="addition">+  auto_detect: true</span></span><br><span class="line">   tab_replace:</span><br></pre></td></tr></table></figure>
 
 <h3 id="3-note标签"><a href="#3-note标签" class="headerlink" title="3.note标签"></a>3.note标签</h3><p>通过 note 标签可以为段落添加背景色，语法如下：</p>
-<figure class="highlight txt"><table><tr><td class="code"><pre><span class="line">&#123;% note [class] %&#125;</span><br><span class="line">文本内容 (支持行内标签)</span><br><span class="line">&#123;% endnote %&#125;</span><br></pre></td></tr></table></figure>
+<figure class="highlight txt"><table><tr><td class="code"><pre><span class="line">&#123;% note class %&#125;</span><br><span class="line">文本内容 (支持行内标签)</span><br><span class="line">&#123;% endnote %&#125;</span><br></pre></td></tr></table></figure>
 
 <p>支持的 class 种类包括 <code>default</code> <code>primary</code> <code>success</code> <code>info</code> <code>warning</code> <code>danger</code>，也可以不指定 class。</p>
 <div class="note primary">
@@ -291,12 +433,12 @@
 </ul>
 <p>示例效果如下：</p>
 
-        <div id="aplayer-YAWeSRrw" class="aplayer aplayer-tag-marker" style="margin-bottom: 20px;">
+        <div id="aplayer-wyTbjqFe" class="aplayer aplayer-tag-marker" style="margin-bottom: 20px;">
             <pre class="aplayer-lrc-content"></pre>
         </div>
         <script>
           var ap = new APlayer({
-            element: document.getElementById("aplayer-YAWeSRrw"),
+            element: document.getElementById("aplayer-wyTbjqFe"),
             narrow: false,
             autoplay: false,
             showlrc: 3,
@@ -327,110 +469,57 @@
       </tags>
   </entry>
   <entry>
-    <title>CPU是怎么运行程序的？</title>
-    <url>/2022/01/23/how-cpu-execute/</url>
-    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>你知道<code>a = 1 + 2</code>在CPU是怎么执行的吗？32位和64位的操作系统有什么区别？64位的软件可以在32位的操作系统上面运行吗？</p>
-<h2 id="图灵机的工作方式"><a href="#图灵机的工作方式" class="headerlink" title="图灵机的工作方式"></a>图灵机的工作方式</h2><p>要想了解程序是怎么执行的，我们先来看下图灵机的工作方式。</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/how-to-execute-turing.webp" alt="图灵机"></p>
-<p>图灵的基本思想是用机器来模拟人们用纸笔进行数学运算的过程，他把这样的过程看作下列两种简单的动作：<br>1、在纸上写上或擦除某个符号；<br>2、把注意力从纸的一个位置移动到另一个位置。<br>而在每个阶段，人要决定下一步的动作，依赖于 (1) 此人当前所关注的纸上某个位置的符号和(2) 此人当前思维的状态。</p>
-<p>那么我们来看下图灵机是怎么执行<code>1 + 2</code>的。</p>
+    <title>存储器结构层次</title>
+    <url>/2022/01/24/memory-hierarchy/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><h2 id="存储器层次结构"><a href="#存储器层次结构" class="headerlink" title="存储器层次结构"></a>存储器层次结构</h2><p>存储器通常分成以下几个级别:</p>
 <ul>
-<li>首先，在纸上写入「1、2、+」这三个字符，并读写头停放在1字符对应的格子上。</li>
-<li>接着，读写头将1写入到存储设备中</li>
-<li>读写头移动到下一格，读取2到存储设备中</li>
-<li>读写头移动到下一格，读取+，判断加未运算符指令，变将存储设备中的1和2相加，得到3，并将3写入到存储设备中</li>
-<li>读写头移动到下一格，将存储设备中的3写入到此格。</li>
+<li>寄存器</li>
+<li>CPU Cache</li>
+<li>内存</li>
+<li>SSD/HDD硬盘</li>
 </ul>
-<p>现代计算机的工作方式与图灵机执行<code>1+2</code>的工作方式基本一致，我们来看下冯诺依曼模型。</p>
-<h2 id="冯诺依曼模型"><a href="#冯诺依曼模型" class="headerlink" title="冯诺依曼模型"></a>冯诺依曼模型</h2><p>冯诺依曼遵循图灵机的设计，使用电子元件构造计算机，约定用二进制进行计算和存储，并定义了<em>冯诺依曼模型</em>。</p>
-<p>冯诺依曼模型定义了计算机的基本结构有五个部分，<strong>运算器</strong>、<strong>控制器</strong>、 <strong>存储器</strong>、<strong>输入设备</strong>、<strong>输出设备</strong>。</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/Von_Neumann_architecture.svg" alt="冯诺依曼模型"></p>
-<p>计算器、控制器位于CPU中，并使用总线与存储器和输入/输出设备完成交互。</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E5%86%AF%E8%AF%BA%E4%BE%9D%E6%9B%BC%E6%A8%A1%E5%9E%8B.webp" alt="冯诺依曼模型"></p>
-<h3 id="寄存器是什么"><a href="#寄存器是什么" class="headerlink" title="寄存器是什么"></a>寄存器是什么</h3><p>看上面的冯诺依曼模型中，CPU中有个寄存器的角色，他是用来干嘛的呢？我们知道CPU中放着控制单元与逻辑运算单元，而数据需要依靠总线与存储单元、输入输出单元交互来获得，依靠总线传输数据会增加运算时间，那么就需要将正在计算的数据存放到寄存器中，通过减少与总线的交互来提升计算速度。根据存储的数据不同，常见的寄存器有以下几种。</p>
+<img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/memory-hierarchy/%E5%AD%98%E5%82%A8%E5%99%A8%E7%BB%93%E6%9E%84%E5%B1%82%E6%AC%A1.jpg" width=200/>
+
+<h3 id="寄存器"><a href="#寄存器" class="headerlink" title="寄存器"></a>寄存器</h3><p>最靠近CPU的控制单元与逻辑运算单元的就是寄存器了，他使用的材料速度是最快的，价格也是最昂贵的，存储容量很少。存储器的数量通常在几十到几百不等，每个寄存器可以用来存储一定字节的数据，比如</p>
 <ul>
-<li>通用寄存器，存放进行运算的数据。</li>
-<li>程序计数器，存放CPU要执行的下一条指令的地址。</li>
-<li>指令寄存器，存放程序计数器指向的指令。</li>
+<li>32位CPU中大多数寄存器可以存储<strong>4</strong>个字节</li>
+<li>64位CPU中大多数可以存储<strong>8</strong>个字节</li>
 </ul>
-<h3 id="总线"><a href="#总线" class="headerlink" title="总线"></a>总线</h3><p>总线用于CPU与内存以及其他设备之前的通信。分为以下三种：</p>
-<ul>
-<li>地址总线，用于指定CPU将要操作的内存地址。</li>
-<li>数据总线，用于读写内存的数据。</li>
-<li>控制总线，用于发送和接收信号，比如中断、设备复位等。CPU收到信号后自然进行相应，也需要控制总线。</li>
-</ul>
-<p>当CPU读写内存时，首先通过<strong>地址总线</strong>来指定内存地址，然后通过<strong>控制总线</strong>来控制读或写命令，最后通过<strong>数据总线</strong>来传输数据。</p>
-<h2 id="线路位宽与CPU位宽"><a href="#线路位宽与CPU位宽" class="headerlink" title="线路位宽与CPU位宽"></a>线路位宽与CPU位宽</h2><p>CPU通过总线与内存进行交互，那么总线是怎么传输数据的呢？其实就是操作电压，低电压为0，高电压为1，以此来表达二进制数据，从而完成数据传输，那么表示一个11010的信号则需要5条线路并行传输，线路的条数称为位宽，一般也对应CPU位宽。</p>
-<p>CPU想要操作内存地址就需要地址总线。</p>
-<p>假设有线路位宽为5，此时CPU想访问内存地址6，那么则通过地址总线传输00110即可，如果此时CPU想访问128，那么传输啥都没用，位宽为5，寻址范围只能在0-31上，可见，位宽决定了CPU能操作的内存大小，32位CPU只能操作<code>2^32</code>(4G)大的内存。</p>
-<div class="note ">
-            <p>所以不要给32位CPU安装8G内存条哦，4G就够了</p>
+<p>寄存器的访问速度非常快，一般要求在半个CPU时钟周期内完成读写，CPU时钟周期跟CPU主频息息相关，比如2GHz主频的CPU，那么它的时钟周期就是1/2G，也就是0.5ns。<br>CPU处理一条指令的时候，除了读写寄存器，还需要解码指令、控制指令和计算。如果寄存器的速度太慢，则会拉长指令的处理周期，从而给用户感觉很卡的样子。</p>
+<div class="note info">
+            <p><strong>时钟周期</strong>：CPU的硬件参数都会有<strong>GHz</strong>这个参数，比如一个1GHz的CPU，指的是时钟频率为1G，代表着1秒会产生1G次数的脉冲信号，每一次脉冲信号高低电平的转换就是一个周期，称为时钟周期。<br>对于CPU来说，一个时钟周期CPU仅能完成一个最基本的动作，时钟频率越高，则时钟周期越短，那么CPU工作的速度也就越快。</p>
           </div>
 
-<p>线路位宽决定了数据传输的能力，那么CPU位宽呢？</p>
-<p>看冯诺依曼模型可知，CPU放着控制单元与逻辑运算单元，CPU位宽决定了这里的计算能力，32位的CPU没法直接加和两个64位大小的数字，需要分高低位加和再组装，而64位计算机则可以直接对64位数字加和，那么CPU位宽则决定了一次能计算多少字节的数据。</p>
-<ul>
-<li>32位CPU一次可以计算4个字节；</li>
-<li>64位CPU一次可以计算8个字节；</li>
-</ul>
-<div class="note ">
-            <p>如果计算的数额不超过32位，此时32位CPU与64位CPU其实没差别</p>
+<h3 id="CPU-Cache"><a href="#CPU-Cache" class="headerlink" title="CPU Cache"></a>CPU Cache</h3><p>CPU Cache 使用<strong>SRAM（静态随机存储器）</strong>芯片。</p>
+<div class="note info">
+            <p>SRAM(静态随机存储器)：一个bit数据，通常需要6根晶体管保存，SRAM存储密度不高，但访问速度很快，之所以称为静态存储器，是因为只要有电，数据就会一直保持存在，停电消失。</p>
           </div>
 
-<h2 id="程序执行的基本过程"><a href="#程序执行的基本过程" class="headerlink" title="程序执行的基本过程"></a>程序执行的基本过程</h2><p>程序实际上是一条条指令，所以程序的运行过程就是把每一条指令一步步的执行起来，负责执行指令的就是CPU。</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/CPU%E6%89%A7%E8%A1%8C%E7%A8%8B%E5%BA%8F.webp" alt="程序执行的基本过程"></p>
-<ol>
-<li><p>CPU读取<strong>程序计数器</strong>的值，该值即为指令的内存地址，然后<strong>控制单元</strong>操作<strong>地址总线</strong>指定需要访问的内存地址，接着通知内存准备数据，数据准备好后通过<strong>数据总线</strong>传输给CPU，CPU收到数据后将该指令存放到<strong>指令寄存器</strong>。</p>
-</li>
-<li><p>CPU分析指令寄存器中的指令，确定指令的类型以及参数，若是计算类型，则交由<strong>逻辑运算单元</strong>，若是存储类型，则交由<strong>控制单元</strong>。</p>
-</li>
-<li><p>当该指令执行完成后，<strong>程序计数器</strong>自增，自增大小有位宽决定，如果是32位宽，则自增4。</p>
-</li>
-</ol>
-<p>以上过程不断循环，程序便跑起来了，这个循环过程成为<strong>CPU的指令周期</strong>。</p>
-<h2 id="a-1-2执行具体过程"><a href="#a-1-2执行具体过程" class="headerlink" title="a = 1 + 2执行具体过程"></a>a = 1 + 2执行具体过程</h2><p>CPU可不认识什么a = 1 + 2，想要程序跑起来，首先要将其翻译成汇编语言，此过程称为汇编代码。</p>
-<p>针对汇编代码，我们还需要用汇编器翻译成机器码，即01000101011这样的机器语言，此时才可以交由CPU完成执行。</p>
-<p>汇编分为<code>数据段</code>与<code>指令段</code>，分别存放数据与指令。</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="数据段与正文段"></p>
-<p>编译器会把<code>a = 1 + 2</code>翻译成4条指令，存放到正文段中。如图，这 4 条指令被存放到了 0x200 ~ 0x20c 的区域中：</p>
-<ul>
-<li>0x200 的内容是 load 指令将 0x100 地址中的数据 1 装入到寄存器 R0；</li>
-<li>0x204 的内容是 load 指令将 0x104 地址中的数据 2 装入到寄存器 R1；</li>
-<li>0x208 的内容是 add 指令将寄存器 R0 和 R1 的数据相加，并把结果存放到寄存器 R2；</li>
-<li>0x20c 的内容是 store 指令将寄存器 R2 中的数据存回数据段中的 0x108 地址中，这个地址也就是变量 a 内存中的地址；</li>
-</ul>
-<h2 id="指令"><a href="#指令" class="headerlink" title="指令"></a>指令</h2><p>编译期在编译程序时，会构造指令，这个过程成为指令的编码。CPU执行程序时，就会解析指令，这个过程称为指令的解码。</p>
-<p>现代CPU使用流水线方式执行指令，流水线方式将一条指令拆成四个阶段，如下图：</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="流水线执行模式"></p>
-<ol>
-<li><p><strong>Fetch</strong> -&gt; CPU通过程序计数器读取对应的内存地址的指令（获取指令）</p>
-</li>
-<li><p><strong>Decode</strong> -&gt; CPU对指令进行解码（指令译码）</p>
-</li>
-<li><p><strong>Execution</strong> -&gt; CPU执行指令（执行指令）</p>
-</li>
-<li><p><strong>Store</strong> -&gt; 将计算结果存回到寄存器或者将寄存器的值存回内存（数据回写）</p>
-</li>
-</ol>
-<p>上面4个阶段，称为<strong>指令周期</strong>，CPU的工作就是一个接着一个执行，周而复始，事实上，不同的阶段有计算机的不同组件完成：</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="指令周期"></p>
-<ul>
-<li>取指令的阶段，我们的指令是存放在<strong>存储器</strong>里的，实际上，通过程序计数器和指令寄存器取出指令的过程，是由<strong>控制器</strong>操作的；</li>
-<li>指令的译码过程，也是由<strong>控制器</strong>进行的；</li>
-<li>指令执行的过程，无论是进行算术操作、逻辑操作，还是进行数据传输、条件分支操作，都是由<strong>算术逻辑单元操作</strong>的，也就是由<strong>运算器</strong>处理的。但是如果是一个简单的无条件地址跳转，则是直接在<strong>控制器</strong>里面完成的，不需要用到运算器。</li>
-</ul>
-<h3 id="指令的类型"><a href="#指令的类型" class="headerlink" title="指令的类型"></a>指令的类型</h3><p>指令从功能角度划分，可以分为 5 大类：</p>
-<ul>
-<li>数据传输类型的指令，比如 <code>store/load</code> 是寄存器与内存间数据传输的指令，<code>mov</code> 是将一个内存地址的数据移动到另一个内存地址的指令；</li>
-<li>运算类型的指令，比如加减乘除、位运算、比较大小等等，它们最多只能处理两个寄存器中的数据；</li>
-<li>跳转类型的指令，通过修改程序计数器的值来达到跳转执行指令的过程，比如编程中常见的 <code>if-else</code>、<code>swtich-case</code>、函数调用等。</li>
-<li>信号类型的指令，比如发生中断的指令 <code>trap</code>；</li>
-<li>闲置类型的指令，比如指令 <code>nop</code>，执行后 CPU 会空转一个周期</li>
-</ul>
+<p>CPU Cache分为L1、L2、L3、这样的三层高速缓存。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/memory-hierarchy/cpu_cache.jpg" alt="CPU三级高速缓存"></p>
+<h4 id="L1高速缓存"><a href="#L1高速缓存" class="headerlink" title="L1高速缓存"></a>L1高速缓存</h4><p>L1高速缓存的访问速度几乎和寄存器一样快，通常只需要<code>2-4</code>个时钟周期，而大小在几十KB到几百KB不等。<br>每个CPU核心都有一块属于自己的L1高速缓存，指令和数据在L1是分开存放的，所以L1高速缓存通常分成指令缓存与数据缓存。</p>
+<p>在Linux系统中，可以查看CPU L1 Cache <strong>数据</strong>缓存的容量大小：</p>
+<figure class="highlight shell"><figcaption><span>linux</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash"><span class="built_in">cat</span> /sys/devices/system/cpu/cpu0/cache/index0/size</span></span><br><span class="line">32K</span><br></pre></td></tr></table></figure>
+
+<p>L1 Cache <strong>指令</strong>缓存的容量大小：</p>
+<figure class="highlight shell"><figcaption><span>linux</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash"><span class="built_in">cat</span> /sys/devices/system/cpu/cpu0/cache/index1/size</span></span><br><span class="line">32K</span><br></pre></td></tr></table></figure>
+
+<h4 id="L2高速缓存"><a href="#L2高速缓存" class="headerlink" title="L2高速缓存"></a>L2高速缓存</h4><p>L2高速缓存同样每个CPU核心都有，但是L2高速缓存位置离CPU更远，大小比L1更大，访问速度更慢，速度在10~20个时钟周期。</p>
+<figure class="highlight shell"><figcaption><span>linux</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash"><span class="built_in">cat</span> /sys/devices/system/cpu/cpu0/cache/index2/size</span></span><br><span class="line">256K</span><br></pre></td></tr></table></figure>
+
+<h4 id="L3高速缓存"><a href="#L3高速缓存" class="headerlink" title="L3高速缓存"></a>L3高速缓存</h4><p>速度更慢，20~60个时钟周期；容量更大，几MB到几十MB。<br>L3高速缓存通常多个CPU核心共用，<em>这里会存在一些并发问题，后续我们来看看CPU是如何解决该问题的</em></p>
+<figure class="highlight shell"><figcaption><span>linux</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash"><span class="built_in">cat</span> /sys/devices/system/cpu/cpu0/cache/index3/size</span> </span><br><span class="line">3072K</span><br></pre></td></tr></table></figure>
+
+<h3 id="内存"><a href="#内存" class="headerlink" title="内存"></a>内存</h3><p>内存使用<strong>DRAM（动态随机存取存储器）</strong>保存数据。<br>相比SRAM，DRAM的密度更高，功耗更低，有更大的容量，而且造价比SRAM芯片便宜很多。<br>DRAM存储一个bit的数据只需要一个电容和一个晶体管即可，但是因为数据会被存储在电容里，而电容会不断漏电，所以需要定时刷新电容，才能保证数据不会被丢失，这就是DRAM之所以被称为<strong>动态</strong>存储器的原因，只有不断刷新，数据才会被存储起来。<br>DRAM的访问电路与刷新电路都更复杂，所以访问的速度会更慢，内存速度大概在<em>200~300</em>个时钟周期。</p>
+<h3 id="SSD-HDD硬盘"><a href="#SSD-HDD硬盘" class="headerlink" title="SSD/HDD硬盘"></a>SSD/HDD硬盘</h3><p>SSD即固态硬盘，结构与内存类似，优点是断电数据也存在，内存的读写速度大概比SSD快10~1000倍。</p>
+<p>HDD即传统的机械硬盘，使用物理读写的方式，所以速度很慢，大概比内存慢10w倍左右，差不多已经被SSD代替了。</p>
+<h2 id="存储器的层次关系"><a href="#存储器的层次关系" class="headerlink" title="存储器的层次关系"></a>存储器的层次关系</h2><p>现代的一台计算机，都用上了CPU Cache、内存、SSD/HDD硬盘这些存储设备了。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/memory-hierarchy/%E5%AD%98%E5%82%A8%E5%99%A8%E7%9A%84%E5%B1%82%E6%AC%A1%E5%85%B3%E7%B3%BB%E5%9B%BE.webp" alt="存储器的层次关系"></p>
+<p>每个存储器只和与他相邻的一层存储器设备打交道。</p>
 ]]></content>
       <tags>
         <tag>操作系统</tag>
-        <tag>CPU</tag>
+        <tag>存储器</tag>
       </tags>
   </entry>
 </search>
