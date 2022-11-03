@@ -194,7 +194,7 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/07/02/cpu-cache/">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/11/03/risc-v%E7%9A%84%E4%B8%89%E7%A7%8D%E6%A8%A1%E5%BC%8F/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="image" content="/favicon.png">
@@ -208,7 +208,7 @@
       <header class="post-header">
         <h2 class="post-title" itemprop="name headline">
           
-            <a href="/2022/07/02/cpu-cache/" class="post-title-link" itemprop="url">CPU Cache</a>
+            <a href="/2022/11/03/risc-v%E7%9A%84%E4%B8%89%E7%A7%8D%E6%A8%A1%E5%BC%8F/" class="post-title-link" itemprop="url">Risc-V的三种模式</a>
         </h2>
 
         <div class="post-meta">
@@ -218,7 +218,7 @@
               </span>
               <span class="post-meta-item-text">发表于</span>
 
-              <time title="创建时间：2022-07-02 19:50:59" itemprop="dateCreated datePublished" datetime="2022-07-02T19:50:59+08:00">2022-07-02</time>
+              <time title="创建时间：2022-11-03 14:39:59" itemprop="dateCreated datePublished" datetime="2022-11-03T14:39:59+08:00">2022-11-03</time>
             </span>
 
           
@@ -226,178 +226,7 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>1.5k</span>
-            </span>
-            <span class="post-meta-item" title="阅读时长">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>1 分钟</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          CPU Cache的数据结构与读取过程
-CPU Cache的数据是从内存中读取过来的，它是以一小块一小块读取数据的，而不是按照单个元素来读取数据的，在CPU Cache中，这样一小块一小块的数据，被称为Cache Line (缓存块)。Cache Line对应到内存的那一小块数据称为Block(内存块)。
-可以使用以下命令查看Cache Line的大小:
-
-linux1
-2
-
-
-$ cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size
-64
-
-
-64即64字节，即L1 CPU Cache一次载入的数据大小为64字节。
-比如，有一个int array[100]的数组，当载入array[0]时，也会同时将array[1
-          <!--noindex-->
-            <div class="post-button">
-              <a class="btn" href="/2022/07/02/cpu-cache/#more" rel="contents">
-                阅读全文 &raquo;
-              </a>
-            </div>
-          <!--/noindex-->
-        
-      
-    </div>
-
-    
-    
-    
-
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/01/24/memory-hierarchy/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/favicon.png">
-      <meta itemprop="name" content="涛桑">
-      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="清明梦">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/01/24/memory-hierarchy/" class="post-title-link" itemprop="url">存储器结构层次</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-
-              <time title="创建时间：2022-01-24 15:48:50" itemprop="dateCreated datePublished" datetime="2022-01-24T15:48:50+08:00">2022-01-24</time>
-            </span>
-
-          
-            <span class="post-meta-item" title="本文字数">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>1.6k</span>
-            </span>
-            <span class="post-meta-item" title="阅读时长">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>1 分钟</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>你知道吗，位于CPU中的各类寄存器、CPU cache、内存 SSD硬盘、机械硬盘都是冯诺依曼模型中的存储单元，为什么设计了这么多存储器呢，他们之间的关系又是什么，存储器是怎么存储数据的，又是怎么提供给CPU使用的呢？</p>
-          <!--noindex-->
-            <div class="post-button">
-              <a class="btn" href="/2022/01/24/memory-hierarchy/">
-                阅读全文 &raquo;
-              </a>
-            </div>
-          <!--/noindex-->
-        
-      
-    </div>
-
-    
-    
-    
-
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/01/23/how-cpu-execute/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/favicon.png">
-      <meta itemprop="name" content="涛桑">
-      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="清明梦">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2022/01/23/how-cpu-execute/" class="post-title-link" itemprop="url">CPU是怎么运行程序的？</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-
-              <time title="创建时间：2022-01-23 11:27:37" itemprop="dateCreated datePublished" datetime="2022-01-23T11:27:37+08:00">2022-01-23</time>
-            </span>
-
-          
-            <span class="post-meta-item" title="本文字数">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>2.9k</span>
+              <span>3.8k</span>
             </span>
             <span class="post-meta-item" title="阅读时长">
               <span class="post-meta-item-icon">
@@ -415,10 +244,10 @@ $ cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size
     <div class="post-body" itemprop="articleBody">
 
       
-          <p>你知道`a = 1 + 2`在CPU是怎么执行的吗？</p>
+          <p>risc-v有三种运行模式，机器模式、管理模式、用户模式。今天我们来介绍下这三种模式，以及在xv6中使用的例子</p>
           <!--noindex-->
             <div class="post-button">
-              <a class="btn" href="/2022/01/23/how-cpu-execute/">
+              <a class="btn" href="/2022/11/03/risc-v%E7%9A%84%E4%B8%89%E7%A7%8D%E6%A8%A1%E5%BC%8F/">
                 阅读全文 &raquo;
               </a>
             </div>
@@ -444,7 +273,7 @@ $ cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/01/03/hexo-writing-skills/">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/10/30/%E5%88%97%E4%B8%AA%E8%AE%A1%E5%88%92%E5%90%A7/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="image" content="/favicon.png">
@@ -458,7 +287,7 @@ $ cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size
       <header class="post-header">
         <h2 class="post-title" itemprop="name headline">
           
-            <a href="/2022/01/03/hexo-writing-skills/" class="post-title-link" itemprop="url">Hexo博客写作技巧</a>
+            <a href="/2022/10/30/%E5%88%97%E4%B8%AA%E8%AE%A1%E5%88%92%E5%90%A7/" class="post-title-link" itemprop="url">列个计划吧</a>
         </h2>
 
         <div class="post-meta">
@@ -468,7 +297,7 @@ $ cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size
               </span>
               <span class="post-meta-item-text">发表于</span>
 
-              <time title="创建时间：2022-01-03 21:12:48" itemprop="dateCreated datePublished" datetime="2022-01-03T21:12:48+08:00">2022-01-03</time>
+              <time title="创建时间：2022-10-30 22:16:03" itemprop="dateCreated datePublished" datetime="2022-10-30T22:16:03+08:00">2022-10-30</time>
             </span>
 
           
@@ -476,86 +305,7 @@ $ cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>7.6k</span>
-            </span>
-            <span class="post-meta-item" title="阅读时长">
-              <span class="post-meta-item-icon">
-                <i class="far fa-clock"></i>
-              </span>
-              <span>7 分钟</span>
-            </span>
-
-        </div>
-      </header>
-
-    
-    
-    
-    <div class="post-body" itemprop="articleBody">
-
-      
-          <p>本文介绍Hexo博客的写作技巧。</p>
-          <!--noindex-->
-            <div class="post-button">
-              <a class="btn" href="/2022/01/03/hexo-writing-skills/">
-                阅读全文 &raquo;
-              </a>
-            </div>
-          <!--/noindex-->
-        
-      
-    </div>
-
-    
-    
-    
-
-    
-      <footer class="post-footer">
-        <div class="post-eof"></div>
-      </footer>
-  </article>
-  
-  
-  
-
-      
-  
-  
-  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2021/12/31/hello-world/">
-
-    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
-      <meta itemprop="image" content="/favicon.png">
-      <meta itemprop="name" content="涛桑">
-      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
-    </span>
-
-    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
-      <meta itemprop="name" content="清明梦">
-    </span>
-      <header class="post-header">
-        <h2 class="post-title" itemprop="name headline">
-          
-            <a href="/2021/12/31/hello-world/" class="post-title-link" itemprop="url">Hello World</a>
-        </h2>
-
-        <div class="post-meta">
-            <span class="post-meta-item">
-              <span class="post-meta-item-icon">
-                <i class="far fa-calendar"></i>
-              </span>
-              <span class="post-meta-item-text">发表于</span>
-
-              <time title="创建时间：2021-12-31 00:00:00" itemprop="dateCreated datePublished" datetime="2021-12-31T00:00:00+08:00">2021-12-31</time>
-            </span>
-
-          
-            <span class="post-meta-item" title="本文字数">
-              <span class="post-meta-item-icon">
-                <i class="far fa-file-word"></i>
-              </span>
-              <span>23</span>
+              <span>510</span>
             </span>
             <span class="post-meta-item" title="阅读时长">
               <span class="post-meta-item-icon">
@@ -573,10 +323,716 @@ $ cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size
     <div class="post-body" itemprop="articleBody">
 
       
-          一切的起源都要从”Hello World”开始…
+          玩了十一个月，玩起来的日子过得可真快呀，靠时间去想明白一些事情确实是有成本的，但是不想明白心里也总是有刺一样，接下来的日子要继续从三项基础技术抓起，逐渐步入正轨，至于客户端还是服务端，也想明白了，客户端还是更加适合我一些，尽管某些时候很讨厌客户端的一些职责，尽管某些时候很喜欢服务端做的事情。为什么选择客户端呢，相比服务端，客户端对于自己的项目与架构拥有更完善的视角，也拥有更多可控力，服务端总有些枯燥乏味的感觉，同时自身也有一两年的客户端开发经验，所以选择一条轻松喜欢的道路何乐而不为呢，毕竟将来人生的道路也有了新的选择。（回老家开超市哈哈哈哈。）
+
+所以，列个计划吧。
+
+巩固基础
+没什么好说的，提升这三者的理解至关重要，基础必须牢嘛
+
+算法
+23年快要过去了，接下来的几年我都要跟进算法，毕竟这
           <!--noindex-->
             <div class="post-button">
-              <a class="btn" href="/2021/12/31/hello-world/#more" rel="contents">
+              <a class="btn" href="/2022/10/30/%E5%88%97%E4%B8%AA%E8%AE%A1%E5%88%92%E5%90%A7/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/10/29/networking-transport-layer/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/10/29/networking-transport-layer/" class="post-title-link" itemprop="url">计算机网络 传输层</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-10-29 11:44:26" itemprop="dateCreated datePublished" datetime="2022-10-29T11:44:26+08:00">2022-10-29</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>915</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>1 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          传输层就关注两个TCP和UDP。
+除此之外我们再关注下多路复用与多路分解。
+在对UDP和TCP介绍之前，我们先简要介绍下网络层，网络层协议即IP，IP的服务模型即尽力而为去交付，尽力而为是委婉的说法，直接点说就是网络层是不靠谱的，传输中数据可能丢失、被更改、等等，即IP是不可靠的服务协议。TCP和UDP是建立在IP之上实现的。TCP和UDP的主要职责就是将两个IP之间的数据传输转换到两个进程之间的数据传输，并以此引出多路复用与多路分解。
+
+多路复用与多路分解
+什么是多路复用与多路分解呢，就是将网络层两个IP之间的数据传输转换到两个端进程的数据传输。
+
+多路复用其实就是把各端口（进程绑定端口）的数据用端口号包装了下，扔到了网络层。
+到了目的传输层后，通过拆解端口的包装来决定分配给哪个socke
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2022/10/29/networking-transport-layer/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/10/29/networking-application-layer/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/10/29/networking-application-layer/" class="post-title-link" itemprop="url">计算机网络：应用层（自顶向下学习笔记）</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-10-29 09:24:48" itemprop="dateCreated datePublished" datetime="2022-10-29T09:24:48+08:00">2022-10-29</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>1.1k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>1 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          为什么要有应用层
+想想为什么要有系统调用，针对用户程序来说，系统调用可以让其使用计算机提供的各种接口，来实现其功能。
+对应的，针对应用层来说，应用层可以使用调用下一层（传输层）提供的能力来完成网络能力，传输层为应用层提供了网络接口，帮助其实现网络应用。
+
+网络应用程序体系结构
+体系结构是有应用程序的研发者设计的，至于怎么设计都是限制在应用层上的，设计可以根据你所需要的业务场景决定，但大部分场景也就一种客户端-服务端体系结构，针对部分应用有对等网络结构（P2P）。
+
+ * 客户端-服务端体系结构，当你打开一个浏览器，或者用手机打开抖音，其都是在使用这种结构，你通过一个浏览器进程或者APP进程访问一个固定的IP地址，从对应的进程中获取数据并返回到你的屏幕上。所以这种结构需要一个处理各种业务数据的
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2022/10/29/networking-application-layer/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/10/28/xv6-lab-2-note/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/10/28/xv6-lab-2-note/" class="post-title-link" itemprop="url">Xv6实验二学习笔记</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-10-28 20:15:07" itemprop="dateCreated datePublished" datetime="2022-10-28T20:15:07+08:00">2022-10-28</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.8k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          当RISC-V计算机上电时，它会初始化自己并运行一个存储在只读内存中的引导加载程序。引导加载程序将xv6内核加载到内存中。然后，在机器模式下，中央处理器从_entry (kernel/entry.S:6)开始运行xv6。
+
+_entry.S 入口
+简述：完成多核cpu栈的分配并跳转到kernel/start.c执行start函数
+
+entry.S1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+
+
+    # qemu -kernel loads the kernel at 0x80000000
+        # and causes each CPU to jump there.
+        # kernel.ld causes t
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2022/10/28/xv6-lab-2-note/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/10/28/xv6-lab1-note/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/10/28/xv6-lab1-note/" class="post-title-link" itemprop="url">Xv6 Lab1 Note</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-10-28 11:46:54" itemprop="dateCreated datePublished" datetime="2022-10-28T11:46:54+08:00">2022-10-28</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>7.2k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>7 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>xv6-2020的实验一记录</p>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2022/10/28/xv6-lab1-note/">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/10/28/%E6%B7%BB%E5%8A%A0%E8%BF%9C%E7%A8%8B%E5%BA%93/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/10/28/%E6%B7%BB%E5%8A%A0%E8%BF%9C%E7%A8%8B%E5%BA%93/" class="post-title-link" itemprop="url">添加远程库</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-10-28 10:46:13" itemprop="dateCreated datePublished" datetime="2022-10-28T10:46:13+08:00">2022-10-28</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>431</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>1 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          当你本地有一个仓库，还没有对应的远端仓库，你想把他推到远端去，首先需要在远端（这里拿github举例）创建仓库
+
+当你创建完一个仓库的时候，这时github其实已经提示你如何操作了，类似这样
+
+git remote add origin git@github.com:michaelliao/learngit.git
+
+这步就是添加一个名叫origin的远端仓库
+
+同时，如果你已经有了一个名叫origin的远端仓库，可以通过以下两种方式来更改
+
+ 1. 更换origin的仓库url: git remote set-url origin git://new.url.here
+    
+    
+ 2. 删除origin远端仓库并重新添加
+    
+     * git remote remove
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2022/10/28/%E6%B7%BB%E5%8A%A0%E8%BF%9C%E7%A8%8B%E5%BA%93/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/08/07/linux%E5%9D%97%E8%AE%BE%E5%A4%87%E8%AF%BB%E5%86%99%E8%BF%87%E7%A8%8B/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/08/07/linux%E5%9D%97%E8%AE%BE%E5%A4%87%E8%AF%BB%E5%86%99%E8%BF%87%E7%A8%8B/" class="post-title-link" itemprop="url">Linux块设备读写过程</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-08-07 14:29:13" itemprop="dateCreated datePublished" datetime="2022-08-07T14:29:13+08:00">2022-08-07</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.2k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>2 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          先来想下，块设备涉及到什么，块设备属于IO设备，涉及到读写，与字符流设备不同的点就在于能够根据块来进行读写，仅取自己想要的块就OK，我们忽略块设备和字符流设备的区别，那么块设备作为IO设备，最重要的作用就是IO，即读写数据。体现到我们平常的使用则是read write，这些。学习块设备主要要学习的就两步，一是对于linux来说一切皆文件，那么一个文件的路径，是如何映射到块设备对应的块的，二是块设备上的数据是怎么与内存交互的，即怎么读进来的。
+
+从源码开始，分析linux0.11的源码，从中梳理过程，带着上面我们提到的两个疑问，开始阅读代码
+
+从open开始
+open都清楚，打开一个文件，那么涉及到的就是文件与IO设备的映射关系。我们从fs/open.c的sys_open函数说起：
+
+fs/o
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2022/08/07/linux%E5%9D%97%E8%AE%BE%E5%A4%87%E8%AF%BB%E5%86%99%E8%BF%87%E7%A8%8B/#more" rel="contents">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/07/21/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%BA%90%E7%A0%81%E4%B8%8E%E6%B5%81%E7%A8%8B%E5%88%86%E6%9E%90/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/07/21/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%BA%90%E7%A0%81%E4%B8%8E%E6%B5%81%E7%A8%8B%E5%88%86%E6%9E%90/" class="post-title-link" itemprop="url">Linux内核启动源码与流程分析（一）</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-07-21 15:55:06" itemprop="dateCreated datePublished" datetime="2022-07-21T15:55:06+08:00">2022-07-21</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.8k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>本节介绍从开机到执行到linux的main函数，中间经历了什么，是怎么执行到main.c的，本文涉及到bootsect.s、setup.s、head.s的源码，以及操作系统与汇编相关的一些知识。是近几天对内核源码学习的总结与记录。</p>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2022/07/21/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%BA%90%E7%A0%81%E4%B8%8E%E6%B5%81%E7%A8%8B%E5%88%86%E6%9E%90/">
+                阅读全文 &raquo;
+              </a>
+            </div>
+          <!--/noindex-->
+        
+      
+    </div>
+
+    
+    
+    
+
+    
+      <footer class="post-footer">
+        <div class="post-eof"></div>
+      </footer>
+  </article>
+  
+  
+  
+
+      
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/07/16/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98%E4%B8%8E%E4%B8%80%E8%87%B4%E6%80%A7/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h2 class="post-title" itemprop="name headline">
+          
+            <a href="/2022/07/16/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98%E4%B8%8E%E4%B8%80%E8%87%B4%E6%80%A7/" class="post-title-link" itemprop="url">高速缓存与一致性</a>
+        </h2>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-07-16 21:09:05" itemprop="dateCreated datePublished" datetime="2022-07-16T21:09:05+08:00">2022-07-16</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>4.9k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>4 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+          <p>https://zhuanlan.zhihu.com/p/136300660，该专栏的学习总结</p>
+          <!--noindex-->
+            <div class="post-button">
+              <a class="btn" href="/2022/07/16/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98%E4%B8%8E%E4%B8%80%E8%87%B4%E6%80%A7/">
                 阅读全文 &raquo;
               </a>
             </div>
@@ -600,6 +1056,9 @@ $ cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size
 
 
   
+  <nav class="pagination">
+    <span class="page-number current">1</span><a class="page-number" href="/page/2/">2</a><a class="extend next" rel="next" href="/page/2/"><i class="fa fa-angle-right" aria-label="下一页"></i></a>
+  </nav>
 
 
 
@@ -666,14 +1125,14 @@ $ cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">5</span>
+          <span class="site-state-item-count">19</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">6</span>
+        <span class="site-state-item-count">14</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
@@ -714,12 +1173,12 @@ $ cat /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="站点总字数">14k</span>
+    <span title="站点总字数">50k</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="站点阅读时长">12 分钟</span>
+    <span title="站点阅读时长">46 分钟</span>
 </div>
 
         

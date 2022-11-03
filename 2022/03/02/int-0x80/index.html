@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png">
+  <link rel="mask-icon" href="/favicon.png" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+<link rel="stylesheet" href="//fonts.googleapis.com/css?family=Monda:300,300italic,400,400italic,700,700italic&display=swap&subset=latin,latin-ext">
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+  <link rel="stylesheet" href="/lib/pace/pace-theme-minimal.min.css">
+  <script src="/lib/pace/pace.min.js"></script>
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"lucidreamiss.github.io","root":"/","scheme":"Mist","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":true,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":true,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta name="description" content="什么是系统调用 上层应用是怎么使用操作系统的呢？操作系统提供系统调用来供上层应用来和操作系统交互，就相当于OS为上层应用暴露了一堆接口，应用使用这些接口来完成相应的功能。举个例子，当你使用printf(&quot;hello, world!&quot;);时，printf是怎么把 hello, world! 输出到控制台上的呢？这里就是printf通过系统调用接口write，将其输出到了控制台上。那为什么不是prin">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Int 0x80">
+<meta property="og:url" content="https://lucidreamiss.github.io/2022/03/02/int-0x80/index.html">
+<meta property="og:site_name" content="清明梦">
+<meta property="og:description" content="什么是系统调用 上层应用是怎么使用操作系统的呢？操作系统提供系统调用来供上层应用来和操作系统交互，就相当于OS为上层应用暴露了一堆接口，应用使用这些接口来完成相应的功能。举个例子，当你使用printf(&quot;hello, world!&quot;);时，printf是怎么把 hello, world! 输出到控制台上的呢？这里就是printf通过系统调用接口write，将其输出到了控制台上。那为什么不是prin">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/int-0x80/idt%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84.jpg">
+<meta property="article:published_time" content="2022-03-02T09:27:12.000Z">
+<meta property="article:modified_time" content="2022-03-02T09:27:12.000Z">
+<meta property="article:author" content="涛桑">
+<meta property="article:tag" content="操作系统">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/int-0x80/idt%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84.jpg">
+
+<link rel="canonical" href="https://lucidreamiss.github.io/2022/03/02/int-0x80/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>Int 0x80 | 清明梦</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">清明梦</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">一起变好</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/03/02/int-0x80/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Int 0x80
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-03-02 17:27:12" itemprop="dateCreated datePublished" datetime="2022-03-02T17:27:12+08:00">2022-03-02</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>4k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>4 分钟</span>
+            </span>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="什么是系统调用"><a href="#什么是系统调用" class="headerlink" title="什么是系统调用"></a>什么是系统调用</h2><p>上层应用是怎么使用操作系统的呢？操作系统提供系统调用来供上层应用来和操作系统交互，就相当于<strong>OS为上层应用暴露了一堆接口，应用使用这些接口来完成相应的功能</strong>。举个例子，当你使用<code>printf(&quot;hello, world!&quot;);</code>时，<code>printf</code>是怎么把 <em>hello, world!</em> 输出到控制台上的呢？这里就是<code>printf</code>通过系统调用接口<code>write</code>，将其输出到了控制台上。那为什么不是<code>printf</code>直接将内容输出，还要通过系统调用<code>write</code>来做呢？展示控制台的这个屏幕，称其为显存，说白了就是一块硬件，那么你在屏幕上显示<code>hello, world!</code>，其实就是在往显存这个硬件中<strong>写入数据</strong>，而往硬件中<strong>写入数据</strong>是进程控制CPU去做的，也就是内核部分做的事情，所以<code>write</code>这个动作就属于系统调用了，需要使用内核态去完成<code>write</code>这个动作。那么就知道了为什么<code>printf</code>不能直接在屏幕输出内容，在屏幕输出内容相当于在硬件写入数据，需要内核态去做这件事，而<code>printf</code>属于用户态，是没有办法直接访问内核数据的，所以需要借助提供出来的<code>write</code>系统调用接口来完成。</p>
+<h2 id="操作系统如何进行权限控制"><a href="#操作系统如何进行权限控制" class="headerlink" title="操作系统如何进行权限控制"></a>操作系统如何进行权限控制</h2><p>上面提到了用户态和内核态，那么怎么区别正在执行的程序是属于内核态还是用户态呢，程序也就是一条条指令，也就是怎么区别当前的指令属于用户态还是内核态，就是通过该指令的地址判断的：<code>CS:IP</code>。</p>
+<blockquote>
+<p>CS和IP是8086CPU中两个关键的寄存器，它们指示了CPU当前要读取指令的地址。CS : 代码段寄存器；IP : 指令指针寄存器。在8086机中，任意时刻，CPU将CS:IP指向的内容当作指令来执行。</p>
+</blockquote>
+<p>通过该指令的地址<code>CS:IP</code>，<code>CS</code>的低两位表示当前处于内核态还是用户态，0表示内核态，1表示用户态。当当前指令的CPL &lt;= 要访问的数据段DPL时，才能够进行访问。</p>
+<blockquote>
+<p>CPL:当前内存段的特权级。DPL:目标内存段的特权级。</p>
+</blockquote>
+<h2 id="printf-“hello-world-”-源码解析"><a href="#printf-“hello-world-”-源码解析" class="headerlink" title="printf(“hello, world!”)源码解析"></a>printf(“hello, world!”)源码解析</h2><p>前面我们提到了，<code>printf</code>函数通过系统调用<code>write</code>函数，将内容输出到显存上。其中还涉及到了用户态到内核态的转变，但是用户态的内存 CPL = 3，内核态的内存段 DPL = 0，本来是不能访问的，这里是怎么做到用户态调用内核态代码的呢？我们一点点来分析。</p>
+<p>这里我们以linux.011举例，<code>printf</code>函数最终会调用到内核态的<code>sys_write</code>（_syscall3宏展开）</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">int</span> <span class="title function_">printf</span> <span class="params">(<span class="type">const</span> <span class="type">char</span> *format, ...)</span> &#123;</span><br><span class="line">    ...</span><br><span class="line">    _syscall3(<span class="type">int</span>,write,<span class="type">int</span>,fd,<span class="type">const</span> <span class="type">char</span> *,buf,<span class="type">off_t</span>,count)</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><figcaption><span>include/unistd.h</span></figcaption><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> _syscall3(type,name,atype,a,btype,b,ctype,c) \</span></span><br><span class="line"><span class="meta">type name(atype a,btype b,ctype c) \</span></span><br><span class="line"><span class="meta">&#123; \</span></span><br><span class="line"><span class="meta">long __res; \</span></span><br><span class="line"><span class="meta">__asm__ volatile (<span class="string">&quot;int $0x80&quot;</span> \</span></span><br><span class="line"><span class="meta">    : <span class="string">&quot;=a&quot;</span> (__res) \</span></span><br><span class="line"><span class="meta">    : <span class="string">&quot;0&quot;</span> (__NR_##name),<span class="string">&quot;b&quot;</span> ((long)(a)),<span class="string">&quot;c&quot;</span> ((long)(b)),<span class="string">&quot;d&quot;</span> ((long)(c))); \</span></span><br><span class="line"><span class="meta"><span class="keyword">if</span> (__res&gt;=0) \</span></span><br><span class="line"><span class="meta">    return (type) __res; \</span></span><br><span class="line"><span class="meta">errno=-__res; \</span></span><br><span class="line"><span class="meta">return -1; \</span></span><br><span class="line"><span class="meta">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>这里使用了一段内联汇编代码+宏，将宏展开后其实就是标准的write函数，这里不做代入，来看下这里最关键的<code>int 0x80</code>，也是本文要描述的重点对象。</p>
+<h3 id="int-0x80"><a href="#int-0x80" class="headerlink" title="int 0x80"></a>int 0x80</h3><p><code>int 0x80</code>怎么解释呢，<code>int</code>是一个中断指令，0x80代表使用<code>idt</code>表中位与0x80位置的中断处理函数来进行中断处理。那么这里又牵扯到了<code>idt</code>表，他又是个什么东西呢。</p>
+<blockquote>
+<p>idt表: 在发生中断时，会选择一个中断处理函数去执行，idt表就是一个存放了所有中断处理函数地址的数组，当执行<code>int 0x80</code>的时候，就是从<code>idt</code>表中取出<code>0x80</code>对应存放的中断处理函数地址，并执行该中断处理函数。<em>除了idt表外，还有gdt、ldt，详细可查阅资料了解。</em></p>
+</blockquote>
+<p>也就是说，在执行<code>int 0x80</code>的时候，就直接跳到了内核态，我们来看下<code>int 0x80</code>到底做了些什么。</p>
+<h3 id="idt-0x80-初始化过程"><a href="#idt-0x80-初始化过程" class="headerlink" title="idt[0x80] 初始化过程"></a>idt[0x80] 初始化过程</h3><figure class="highlight c"><figcaption><span>kernel/sched.c</span></figcaption><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line"><span class="type">void</span> <span class="title function_">sched_init</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    ...</span><br><span class="line">    set_system_gate(<span class="number">0x80</span>,&amp;system_call);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><figcaption><span>include/asm/system.h</span></figcaption><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> set_system_gate(n,addr) _set_gate(&amp;idt[n],15,3,addr)</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><figcaption><span>include/asm/system.h</span></figcaption><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> _set_gate(gate_addr,type,dpl,addr) \</span></span><br><span class="line"><span class="meta">__asm__ (<span class="string">&quot;movw %%dx,%%ax\n\t&quot;</span> \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;movw %0,%%dx\n\t&quot;</span> \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;movl %%eax,%1\n\t&quot;</span> \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;movl %%edx,%2&quot;</span> \</span></span><br><span class="line"><span class="meta">    : \</span></span><br><span class="line"><span class="meta">    : <span class="string">&quot;i&quot;</span> ((short) (0x8000+(dpl&lt;&lt;13)+(type&lt;&lt;8))), \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;o&quot;</span> (*((char *) (gate_addr))), \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;o&quot;</span> (*(4+(char *) (gate_addr))), \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;d&quot;</span> ((char *) (addr)),<span class="string">&quot;a&quot;</span> (0x00080000))</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><figcaption><span>idt数据结构</span></figcaption><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">desc_struct</span> &#123;</span></span><br><span class="line">    <span class="type">unsigned</span> <span class="type">long</span> a,b;</span><br><span class="line">&#125; desc_table[<span class="number">256</span>];</span><br><span class="line"></span><br><span class="line"><span class="keyword">extern</span> desc_table idt,gdt;</span><br></pre></td></tr></table></figure>
+
+<p><code>sched_init</code>调用了<code>_set_gate(&amp;idt[0x80], 15, 3, &amp;system_call)</code>，这里的<code>system_call</code>就是系统调用，我们将这里的四个参数一一对应下</p>
+<ul>
+<li>gate_addr -&gt; idt[0x80]，gate_addr就是idt表中下标为0x80的那个元素，根据idt的数据结构能看出，一个idt有64位。</li>
+<li>type: 15，这个跟类型相关的不是关注重点，可以忽略。</li>
+<li>dpl: 3，前面我们提到cpl为当前指令特权级，dpl为目标段特权级，可想而知，这里可能将目标段指令dpl置为了3</li>
+<li>addr -&gt; 指中断处理函数地址，即<code>system_call</code>的地址</li>
+</ul>
+<p>根据参数，我们大概可以推测出来一些东西，我们要将<strong>中断处理函数的地址</strong>、<strong>type</strong>、<strong>dpl</strong>全部塞到大小为<strong>64bit</strong>的idt[0x80]中，接下来就是解释下这段汇编做了什么就能理解怎么塞的了。<br>我用伪代码的形式重新描述下</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">// init</span></span><br><span class="line"><span class="type">char</span>* edx = addr <span class="comment">// edx寄存器保存system_call地址 -&gt; &quot;d&quot; ((char *) (addr))</span></span><br><span class="line"><span class="type">char</span>* eax = <span class="number">0x0008</span> <span class="number">0000</span> <span class="comment">// eax寄存器置为0x0008 0000 -&gt; &quot;a&quot; (0x00080000))</span></span><br><span class="line"></span><br><span class="line">eax = edx &amp; <span class="number">0x0000</span> <span class="number">1111</span> <span class="comment">// 将system_call地址的低16位赋值给eax的低16位 -&gt; movw %%dx,%%ax</span></span><br><span class="line"></span><br><span class="line">edx = edx &amp; <span class="number">0x1111</span> <span class="number">0000</span> &amp; (<span class="number">0x8000</span>+(dpl&lt;&lt;<span class="number">13</span>)+(type&lt;&lt;<span class="number">8</span>)) <span class="comment">// 将dpl和type位移到对应的位置，赋值给edx的低16位</span></span><br><span class="line"></span><br><span class="line">idt[<span class="number">0x80</span>].a = eax <span class="comment">// 将eax赋值到idt[0x80]的低32位 -&gt; movl %%eax,%1    (*((char *) (gate_addr)))</span></span><br><span class="line"></span><br><span class="line">idt[<span class="number">0x80</span>].b = ebx <span class="comment">// 将ebx赋值到idt[0x80]的高32位 -&gt; movl %%edx,%2    (*(4+(char *) (gate_addr)))</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>赋值完成，接下来我们看下idt详细的数据结构。</p>
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">gate_struct</span> &#123;</span></span><br><span class="line">  u16     offset_low;</span><br><span class="line">  u16     segment;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">idt_bits</span> <span class="title">bits</span>;</span></span><br><span class="line">  u16     offset_middle;</span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> CONFIG_X86_64</span></span><br><span class="line">  u32     offset_high;</span><br><span class="line">  u32     reserved;</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">&#125; __attribute__((packed));</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">idt_bits</span> &#123;</span></span><br><span class="line">   u16     ist : <span class="number">3</span>,</span><br><span class="line">           zero    : <span class="number">5</span>,</span><br><span class="line">           type    : <span class="number">5</span>,</span><br><span class="line">           dpl : <span class="number">2</span>,</span><br><span class="line">           p   : <span class="number">1</span>;</span><br><span class="line">&#125; __attribute__((packed));</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/int-0x80/idt%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84.jpg" alt="idt数据结构"></p>
+<p>那么我们再来想下，这里的系统调用是怎么实现用户态代码CPL = 3，调用到DPL = 0的内核中断处理函数的</p>
+<ol>
+<li>用户态代码访问idt[0x80]</li>
+<li>用户态代码CPL与idt[0x80]的DPL都为3，可以访问</li>
+<li>使用idt[0x80]查询<code>system_call</code>的地址，此时会使用到段选择符</li>
+<li>这里的段选择符为<code>0x0008</code>，段选择符就是用来访问<code>system_call</code>代码段地址的<code>CS</code>，展开为<code>CS=0000000000001000</code>，前面讲到CS的末两位即为<code>CPL</code>，也就是说中断处理函数的代码段地址CPL = 0</li>
+<li>所以总结来看，就是idt[0x80]帮助我们完成了用户态代码调用内核态的过程。</li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+    
+      <div>
+        <div>
+  
+    <div style="text-align:center;color:#bfbfbf;font-size:16px;">
+      <span>-------- 本文结束 </span>
+      <i class="fa fa-"></i>
+      <span> 感谢阅读 --------</span>
+    </div>
+  
+</div>
+      </div>
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/" rel="tag"><i class="fa fa-tag"></i> 操作系统</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/02/01/v-memory/" rel="prev" title="虚拟内存学习笔记">
+      <i class="fa fa-chevron-left"></i> 虚拟内存学习笔记
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/07/12/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/" rel="next" title="操作系统学习笔记">
+      操作系统学习笔记 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E4%BB%80%E4%B9%88%E6%98%AF%E7%B3%BB%E7%BB%9F%E8%B0%83%E7%94%A8"><span class="nav-number">1.</span> <span class="nav-text">什么是系统调用</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%A6%82%E4%BD%95%E8%BF%9B%E8%A1%8C%E6%9D%83%E9%99%90%E6%8E%A7%E5%88%B6"><span class="nav-number">2.</span> <span class="nav-text">操作系统如何进行权限控制</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#printf-%E2%80%9Chello-world-%E2%80%9D-%E6%BA%90%E7%A0%81%E8%A7%A3%E6%9E%90"><span class="nav-number">3.</span> <span class="nav-text">printf(“hello, world!”)源码解析</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#int-0x80"><span class="nav-number">3.1.</span> <span class="nav-text">int 0x80</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#idt-0x80-%E5%88%9D%E5%A7%8B%E5%8C%96%E8%BF%87%E7%A8%8B"><span class="nav-number">3.2.</span> <span class="nav-text">idt[0x80] 初始化过程</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="涛桑"
+      src="/favicon.png">
+  <p class="site-author-name" itemprop="name">涛桑</p>
+  <div class="site-description" itemprop="description">黑夜与白天，与清明梦之间</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">19</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">14</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/lucidreamiss" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;lucidreamiss" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">清明梦</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="站点总字数">50k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="站点阅读时长">46 分钟</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/pangu@4/dist/browser/pangu.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<script src="/live2dw/lib/L2Dwidget.min.js?094cbace49a39548bed64abff5988b05"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"debug":false,"model":{"scale":1,"hHeadPos":0.5,"vHeadPos":0.618,"jsonPath":"/live2dw/assets/koharu.model.json"},"display":{"superSample":2,"hOffset":0,"vOffset":-40,"position":"right","width":150,"height":300},"mobile":{"show":false,"scale":0.2},"react":{"opacityDefault":0.5,"opacityOnHover":0.2},"log":false});</script></body>
+</html>

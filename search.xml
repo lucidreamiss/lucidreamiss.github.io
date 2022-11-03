@@ -2,7 +2,7 @@
 <search>
   <entry>
     <title>CPU Cache</title>
-    <url>/2022/07/02/cpu-cache/</url>
+    <url>/2022/01/25/cpu-cache/</url>
     <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><h2 id="CPU-Cache的数据结构与读取过程"><a href="#CPU-Cache的数据结构与读取过程" class="headerlink" title="CPU Cache的数据结构与读取过程"></a>CPU Cache的数据结构与读取过程</h2><p><code>CPU Cache</code>的数据是从内存中读取过来的，它是以一小块一小块读取数据的，而不是按照单个元素来读取数据的，在CPU Cache中，这样一小块一小块的数据，被称为<code>Cache Line</code> (缓存块)。Cache Line对应到内存的那一小块数据称为<code>Block</code>(内存块)。<br>可以使用以下命令查看<code>Cache Line</code>的大小:</p>
 <figure class="highlight shell"><figcaption><span>linux</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="meta prompt_">$ </span><span class="language-bash"><span class="built_in">cat</span> /sys/devices/system/cpu/cpu0/cache/index0/coherency_line_size</span></span><br><span class="line">64</span><br></pre></td></tr></table></figure>
 
@@ -26,120 +26,41 @@
 <li>当CPU Cache没有数据时，直接把数据写入到内存中。</li>
 </ul>
 </li>
-<li>写回</li>
+<li>写回，为减少数据同步内存的频率，就出现了写回机制：当发生写操作时，新的数据仅仅被写入Cache Block中，只有当修改过的Cache Block<em>被替换</em>时，才需要写到内存中，以此来减少写回频率。<ul>
+<li>当CPU Cache中有数据时，将数据写到CPU Cache中，并将数据标记为脏。</li>
+<li>当CPU Cache中对应的Cache Line存放的是另一块Block数据时，如果该Cache Line被标记为脏，则需要将其写入到内存中，然后再将需要的数据从内存写入到CPU Cache中，再讲CPU返回的数据写到CPU Cache中，同时将其标记为脏。（为什么不直接把数据写入到内存里呢？而是间接使用Cache呢？实际上在单核CPU中，这么多是没有问题的，而对于多核CPU，就存在缓存一致性的问题了，这样做的目的就是为了保持缓存一致性。）</li>
 </ul>
+</li>
+</ul>
+<h2 id="缓存一致性问题"><a href="#缓存一致性问题" class="headerlink" title="缓存一致性问题"></a>缓存一致性问题</h2><p>在单核CPU的操作系统中，该问题不存在，现在计算机大多是多核CPU，每个CPU核心都有自己独立的CPU Cache，此时就会出现CPU的缓存一致性问题。<br>举个例子：<br>当两个CPU都缓存了<code>i = 0</code>的Block后，此时<code>A CPU</code>修改了i的值（写回策略，不会把值同步到内存中去），但此时<code>B CPU</code>中的还是1。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/cpu-cache/%E7%BC%93%E5%AD%98%E4%B8%80%E8%87%B4%E6%80%A7%E9%97%AE%E9%A2%98%E4%BE%8B%E5%AD%902.webp" alt="缓存一致性"></p>
+<p>要解决缓存一致性的问题，就需要一种机制，来同步两个不同核心里面的缓存数据，我们来看下实现该机制需要具备哪些能力。</p>
+<ul>
+<li><code>Write Propagation（写传播）</code>：某个CPU的数据更新是，必须要传播给其他核心的CPU</li>
+<li><code>Transaction Serialization（事务的串行话）</code>：某个CPU核心里对数据的操作，他其他核心中，顺序是要一样的。</li>
+</ul>
+<p>第一点写传播很容易理解，事务的串行化该怎么理解呢？假设有ABCD三个CPU，A离C近，B离D近，AC现在都要对i变量修改，A要将i改为100，B要将改为200。在传输速率一致的情况下，C先接收到A变更的信号，再接收B的，那么则看到的消息为i=100,i=200。D则与之相反，这里仔细发散去想会有很多问题。</p>
+<p>所以我们要保证事务的串行化，保证该机制需要做到以下两点：</p>
+<ul>
+<li>CPU对于Cache中数据的操作，需要同步给其他CPU核心。</li>
+<li>引入锁，如果两个CPU同时更新数据，只有拿到锁的CPU才可以更新数据。</li>
+</ul>
+<h3 id="总线嗅探"><a href="#总线嗅探" class="headerlink" title="总线嗅探"></a>总线嗅探</h3><p>不多介绍，类似观察者模式，每个CPU都观察其他CPU的数据变更，这样可以做到<code>Write Propagation（写传播）</code>但无法做到<code>Transaction Serialization（事务的串行化）</code>。</p>
+<h3 id="MESI协议（牛逼的来了）"><a href="#MESI协议（牛逼的来了）" class="headerlink" title="MESI协议（牛逼的来了）"></a>MESI协议（牛逼的来了）</h3><p>MESI协议基于总线嗅探机制，利用状态机实现了事务串行化，同时还降低了总线嗅探时信息传播的频率。</p>
+<p>MESI协议定义了Cache Line的四种状态，分别是<code>Modified（已修改）</code>、<code>Exclusive（独占）</code>、<code>Shared（共享）</code>、<code>Invalidated（失效）</code>。</p>
+<ul>
+<li><code>Modified</code>：还记得前面提过的写回吗，当CPU对CPU Cache的数据修改后，会为其添加脏标记，这里的脏标记即<code>Modified</code>状态</li>
+<li><code>Invalidated</code>：失效，这表示该CPU核心中的Cache Line已经失效了，不能直接使用。</li>
+<li><code>Shared</code>：此时<code>Block</code>与<code>Cache Line</code>的数据一致，且多个CPU核心都有该<code>Block</code>的缓存。</li>
+<li><code>Exclusive</code>：独占，此时<code>Block</code>与<code>Cache Line</code>的数据一致，且仅有一个CPU拥有该份数据。</li>
+</ul>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/cpu-cache/_MESI%E7%8A%B6%E6%80%81%E8%BD%AC%E6%8D%A2%E8%A1%A8%E6%A0%BC.webp" alt="MESI状态转换过程"></p>
+<p>上图描述一目了然。</p>
 ]]></content>
       <tags>
         <tag>操作系统</tag>
         <tag>CPU</tag>
         <tag>CPU Cache</tag>
-      </tags>
-  </entry>
-  <entry>
-    <title>CPU是怎么运行程序的？</title>
-    <url>/2022/01/23/how-cpu-execute/</url>
-    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>你知道<code>a = 1 + 2</code>在CPU是怎么执行的吗？32位和64位的操作系统有什么区别？64位的软件可以在32位的操作系统上面运行吗？</p>
-<h2 id="图灵机的工作方式"><a href="#图灵机的工作方式" class="headerlink" title="图灵机的工作方式"></a>图灵机的工作方式</h2><p>要想了解程序是怎么执行的，我们先来看下图灵机的工作方式。</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/how-to-execute-turing.webp" alt="图灵机"></p>
-<p>图灵的基本思想是用机器来模拟人们用纸笔进行数学运算的过程，他把这样的过程看作下列两种简单的动作：<br>1、在纸上写上或擦除某个符号；<br>2、把注意力从纸的一个位置移动到另一个位置。<br>而在每个阶段，人要决定下一步的动作，依赖于 (1) 此人当前所关注的纸上某个位置的符号和(2) 此人当前思维的状态。</p>
-<p>那么我们来看下图灵机是怎么执行<code>1 + 2</code>的。</p>
-<ul>
-<li>首先，在纸上写入「1、2、+」这三个字符，并读写头停放在1字符对应的格子上。</li>
-<li>接着，读写头将1写入到存储设备中</li>
-<li>读写头移动到下一格，读取2到存储设备中</li>
-<li>读写头移动到下一格，读取+，判断加未运算符指令，变将存储设备中的1和2相加，得到3，并将3写入到存储设备中</li>
-<li>读写头移动到下一格，将存储设备中的3写入到此格。</li>
-</ul>
-<p>现代计算机的工作方式与图灵机执行<code>1+2</code>的工作方式基本一致，我们来看下冯诺依曼模型。</p>
-<h2 id="冯诺依曼模型"><a href="#冯诺依曼模型" class="headerlink" title="冯诺依曼模型"></a>冯诺依曼模型</h2><p>冯诺依曼遵循图灵机的设计，使用电子元件构造计算机，约定用二进制进行计算和存储，并定义了<em>冯诺依曼模型</em>。</p>
-<p>冯诺依曼模型定义了计算机的基本结构有五个部分，<strong>运算器</strong>、<strong>控制器</strong>、 <strong>存储器</strong>、<strong>输入设备</strong>、<strong>输出设备</strong>。</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/Von_Neumann_architecture.svg" alt="冯诺依曼模型"></p>
-<p>计算器、控制器位于CPU中，并使用总线与存储器和输入/输出设备完成交互。</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E5%86%AF%E8%AF%BA%E4%BE%9D%E6%9B%BC%E6%A8%A1%E5%9E%8B.webp" alt="冯诺依曼模型"></p>
-<h3 id="寄存器是什么"><a href="#寄存器是什么" class="headerlink" title="寄存器是什么"></a>寄存器是什么</h3><p>看上面的冯诺依曼模型中，CPU中有个寄存器的角色，他是用来干嘛的呢？我们知道CPU中放着控制单元与逻辑运算单元，而数据需要依靠总线与存储单元、输入输出单元交互来获得，依靠总线传输数据会增加运算时间，那么就需要将正在计算的数据存放到寄存器中，通过减少与总线的交互来提升计算速度。根据存储的数据不同，常见的寄存器有以下几种。</p>
-<ul>
-<li>通用寄存器，存放进行运算的数据。</li>
-<li>程序计数器，存放CPU要执行的下一条指令的地址。</li>
-<li>指令寄存器，存放程序计数器指向的指令。</li>
-</ul>
-<h3 id="总线"><a href="#总线" class="headerlink" title="总线"></a>总线</h3><p>总线用于CPU与内存以及其他设备之前的通信。分为以下三种：</p>
-<ul>
-<li>地址总线，用于指定CPU将要操作的内存地址。</li>
-<li>数据总线，用于读写内存的数据。</li>
-<li>控制总线，用于发送和接收信号，比如中断、设备复位等。CPU收到信号后自然进行相应，也需要控制总线。</li>
-</ul>
-<p>当CPU读写内存时，首先通过<strong>地址总线</strong>来指定内存地址，然后通过<strong>控制总线</strong>来控制读或写命令，最后通过<strong>数据总线</strong>来传输数据。</p>
-<h2 id="线路位宽与CPU位宽"><a href="#线路位宽与CPU位宽" class="headerlink" title="线路位宽与CPU位宽"></a>线路位宽与CPU位宽</h2><p>CPU通过总线与内存进行交互，那么总线是怎么传输数据的呢？其实就是操作电压，低电压为0，高电压为1，以此来表达二进制数据，从而完成数据传输，那么表示一个11010的信号则需要5条线路并行传输，线路的条数称为位宽，一般也对应CPU位宽。</p>
-<p>CPU想要操作内存地址就需要地址总线。</p>
-<p>假设有线路位宽为5，此时CPU想访问内存地址6，那么则通过地址总线传输00110即可，如果此时CPU想访问128，那么传输啥都没用，位宽为5，寻址范围只能在0-31上，可见，位宽决定了CPU能操作的内存大小，32位CPU只能操作<code>2^32</code>(4G)大的内存。</p>
-<div class="note ">
-            <p>所以不要给32位CPU安装8G内存条哦，4G就够了</p>
-          </div>
-
-<p>线路位宽决定了数据传输的能力，那么CPU位宽呢？</p>
-<p>看冯诺依曼模型可知，CPU放着控制单元与逻辑运算单元，CPU位宽决定了这里的计算能力，32位的CPU没法直接加和两个64位大小的数字，需要分高低位加和再组装，而64位计算机则可以直接对64位数字加和，那么CPU位宽则决定了一次能计算多少字节的数据。</p>
-<ul>
-<li>32位CPU一次可以计算4个字节；</li>
-<li>64位CPU一次可以计算8个字节；</li>
-</ul>
-<div class="note ">
-            <p>如果计算的数额不超过32位，此时32位CPU与64位CPU其实没差别</p>
-          </div>
-
-<h2 id="程序执行的基本过程"><a href="#程序执行的基本过程" class="headerlink" title="程序执行的基本过程"></a>程序执行的基本过程</h2><p>程序实际上是一条条指令，所以程序的运行过程就是把每一条指令一步步的执行起来，负责执行指令的就是CPU。</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/CPU%E6%89%A7%E8%A1%8C%E7%A8%8B%E5%BA%8F.webp" alt="程序执行的基本过程"></p>
-<ol>
-<li><p>CPU读取<strong>程序计数器</strong>的值，该值即为指令的内存地址，然后<strong>控制单元</strong>操作<strong>地址总线</strong>指定需要访问的内存地址，接着通知内存准备数据，数据准备好后通过<strong>数据总线</strong>传输给CPU，CPU收到数据后将该指令存放到<strong>指令寄存器</strong>。</p>
-</li>
-<li><p>CPU分析指令寄存器中的指令，确定指令的类型以及参数，若是计算类型，则交由<strong>逻辑运算单元</strong>，若是存储类型，则交由<strong>控制单元</strong>。</p>
-</li>
-<li><p>当该指令执行完成后，<strong>程序计数器</strong>自增，自增大小有位宽决定，如果是32位宽，则自增4。</p>
-</li>
-</ol>
-<p>以上过程不断循环，程序便跑起来了，这个循环过程成为<strong>CPU的指令周期</strong>。</p>
-<h2 id="a-1-2执行具体过程"><a href="#a-1-2执行具体过程" class="headerlink" title="a = 1 + 2执行具体过程"></a>a = 1 + 2执行具体过程</h2><p>CPU可不认识什么a = 1 + 2，想要程序跑起来，首先要将其翻译成汇编语言，此过程称为汇编代码。</p>
-<p>针对汇编代码，我们还需要用汇编器翻译成机器码，即01000101011这样的机器语言，此时才可以交由CPU完成执行。</p>
-<p>汇编分为<code>数据段</code>与<code>指令段</code>，分别存放数据与指令。</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="数据段与正文段"></p>
-<p>编译器会把<code>a = 1 + 2</code>翻译成4条指令，存放到正文段中。如图，这 4 条指令被存放到了 0x200 ~ 0x20c 的区域中：</p>
-<ul>
-<li>0x200 的内容是 load 指令将 0x100 地址中的数据 1 装入到寄存器 R0；</li>
-<li>0x204 的内容是 load 指令将 0x104 地址中的数据 2 装入到寄存器 R1；</li>
-<li>0x208 的内容是 add 指令将寄存器 R0 和 R1 的数据相加，并把结果存放到寄存器 R2；</li>
-<li>0x20c 的内容是 store 指令将寄存器 R2 中的数据存回数据段中的 0x108 地址中，这个地址也就是变量 a 内存中的地址；</li>
-</ul>
-<h2 id="指令"><a href="#指令" class="headerlink" title="指令"></a>指令</h2><p>编译期在编译程序时，会构造指令，这个过程成为指令的编码。CPU执行程序时，就会解析指令，这个过程称为指令的解码。</p>
-<p>现代CPU使用流水线方式执行指令，流水线方式将一条指令拆成四个阶段，如下图：</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="流水线执行模式"></p>
-<ol>
-<li><p><strong>Fetch</strong> -&gt; CPU通过程序计数器读取对应的内存地址的指令（获取指令）</p>
-</li>
-<li><p><strong>Decode</strong> -&gt; CPU对指令进行解码（指令译码）</p>
-</li>
-<li><p><strong>Execution</strong> -&gt; CPU执行指令（执行指令）</p>
-</li>
-<li><p><strong>Store</strong> -&gt; 将计算结果存回到寄存器或者将寄存器的值存回内存（数据回写）</p>
-</li>
-</ol>
-<p>上面4个阶段，称为<strong>指令周期</strong>，CPU的工作就是一个接着一个执行，周而复始，事实上，不同的阶段有计算机的不同组件完成：</p>
-<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="指令周期"></p>
-<ul>
-<li>取指令的阶段，我们的指令是存放在<strong>存储器</strong>里的，实际上，通过程序计数器和指令寄存器取出指令的过程，是由<strong>控制器</strong>操作的；</li>
-<li>指令的译码过程，也是由<strong>控制器</strong>进行的；</li>
-<li>指令执行的过程，无论是进行算术操作、逻辑操作，还是进行数据传输、条件分支操作，都是由<strong>算术逻辑单元操作</strong>的，也就是由<strong>运算器</strong>处理的。但是如果是一个简单的无条件地址跳转，则是直接在<strong>控制器</strong>里面完成的，不需要用到运算器。</li>
-</ul>
-<h3 id="指令的类型"><a href="#指令的类型" class="headerlink" title="指令的类型"></a>指令的类型</h3><p>指令从功能角度划分，可以分为 5 大类：</p>
-<ul>
-<li>数据传输类型的指令，比如 <code>store/load</code> 是寄存器与内存间数据传输的指令，<code>mov</code> 是将一个内存地址的数据移动到另一个内存地址的指令；</li>
-<li>运算类型的指令，比如加减乘除、位运算、比较大小等等，它们最多只能处理两个寄存器中的数据；</li>
-<li>跳转类型的指令，通过修改程序计数器的值来达到跳转执行指令的过程，比如编程中常见的 <code>if-else</code>、<code>swtich-case</code>、函数调用等。</li>
-<li>信号类型的指令，比如发生中断的指令 <code>trap</code>；</li>
-<li>闲置类型的指令，比如指令 <code>nop</code>，执行后 CPU 会空转一个周期</li>
-</ul>
-]]></content>
-      <tags>
-        <tag>操作系统</tag>
-        <tag>CPU</tag>
       </tags>
   </entry>
   <entry>
@@ -433,12 +354,12 @@
 </ul>
 <p>示例效果如下：</p>
 
-        <div id="aplayer-wyTbjqFe" class="aplayer aplayer-tag-marker" style="margin-bottom: 20px;">
+        <div id="aplayer-RWinzfzl" class="aplayer aplayer-tag-marker" style="margin-bottom: 20px;">
             <pre class="aplayer-lrc-content"></pre>
         </div>
         <script>
           var ap = new APlayer({
-            element: document.getElementById("aplayer-wyTbjqFe"),
+            element: document.getElementById("aplayer-RWinzfzl"),
             narrow: false,
             autoplay: false,
             showlrc: 3,
@@ -466,6 +387,364 @@
       <tags>
         <tag>Hexo</tag>
         <tag>Markdown</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CPU是怎么运行程序的？</title>
+    <url>/2022/01/23/how-cpu-execute/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>你知道<code>a = 1 + 2</code>在CPU是怎么执行的吗？32位和64位的操作系统有什么区别？64位的软件可以在32位的操作系统上面运行吗？</p>
+<h2 id="图灵机的工作方式"><a href="#图灵机的工作方式" class="headerlink" title="图灵机的工作方式"></a>图灵机的工作方式</h2><p>要想了解程序是怎么执行的，我们先来看下图灵机的工作方式。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/how-to-execute-turing.webp" alt="图灵机"></p>
+<p>图灵的基本思想是用机器来模拟人们用纸笔进行数学运算的过程，他把这样的过程看作下列两种简单的动作：<br>1、在纸上写上或擦除某个符号；<br>2、把注意力从纸的一个位置移动到另一个位置。<br>而在每个阶段，人要决定下一步的动作，依赖于 (1) 此人当前所关注的纸上某个位置的符号和(2) 此人当前思维的状态。</p>
+<p>那么我们来看下图灵机是怎么执行<code>1 + 2</code>的。</p>
+<ul>
+<li>首先，在纸上写入「1、2、+」这三个字符，并读写头停放在1字符对应的格子上。</li>
+<li>接着，读写头将1写入到存储设备中</li>
+<li>读写头移动到下一格，读取2到存储设备中</li>
+<li>读写头移动到下一格，读取+，判断加未运算符指令，变将存储设备中的1和2相加，得到3，并将3写入到存储设备中</li>
+<li>读写头移动到下一格，将存储设备中的3写入到此格。</li>
+</ul>
+<p>现代计算机的工作方式与图灵机执行<code>1+2</code>的工作方式基本一致，我们来看下冯诺依曼模型。</p>
+<h2 id="冯诺依曼模型"><a href="#冯诺依曼模型" class="headerlink" title="冯诺依曼模型"></a>冯诺依曼模型</h2><p>冯诺依曼遵循图灵机的设计，使用电子元件构造计算机，约定用二进制进行计算和存储，并定义了<em>冯诺依曼模型</em>。</p>
+<p>冯诺依曼模型定义了计算机的基本结构有五个部分，<strong>运算器</strong>、<strong>控制器</strong>、 <strong>存储器</strong>、<strong>输入设备</strong>、<strong>输出设备</strong>。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/Von_Neumann_architecture.svg" alt="冯诺依曼模型"></p>
+<p>计算器、控制器位于CPU中，并使用总线与存储器和输入/输出设备完成交互。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E5%86%AF%E8%AF%BA%E4%BE%9D%E6%9B%BC%E6%A8%A1%E5%9E%8B.webp" alt="冯诺依曼模型"></p>
+<h3 id="寄存器是什么"><a href="#寄存器是什么" class="headerlink" title="寄存器是什么"></a>寄存器是什么</h3><p>看上面的冯诺依曼模型中，CPU中有个寄存器的角色，他是用来干嘛的呢？我们知道CPU中放着控制单元与逻辑运算单元，而数据需要依靠总线与存储单元、输入输出单元交互来获得，依靠总线传输数据会增加运算时间，那么就需要将正在计算的数据存放到寄存器中，通过减少与总线的交互来提升计算速度。根据存储的数据不同，常见的寄存器有以下几种。</p>
+<ul>
+<li>通用寄存器，存放进行运算的数据。</li>
+<li>程序计数器，存放CPU要执行的下一条指令的地址。</li>
+<li>指令寄存器，存放程序计数器指向的指令。</li>
+</ul>
+<h3 id="总线"><a href="#总线" class="headerlink" title="总线"></a>总线</h3><p>总线用于CPU与内存以及其他设备之前的通信。分为以下三种：</p>
+<ul>
+<li>地址总线，用于指定CPU将要操作的内存地址。</li>
+<li>数据总线，用于读写内存的数据。</li>
+<li>控制总线，用于发送和接收信号，比如中断、设备复位等。CPU收到信号后自然进行相应，也需要控制总线。</li>
+</ul>
+<p>当CPU读写内存时，首先通过<strong>地址总线</strong>来指定内存地址，然后通过<strong>控制总线</strong>来控制读或写命令，最后通过<strong>数据总线</strong>来传输数据。</p>
+<h2 id="线路位宽与CPU位宽"><a href="#线路位宽与CPU位宽" class="headerlink" title="线路位宽与CPU位宽"></a>线路位宽与CPU位宽</h2><p>CPU通过总线与内存进行交互，那么总线是怎么传输数据的呢？其实就是操作电压，低电压为0，高电压为1，以此来表达二进制数据，从而完成数据传输，那么表示一个11010的信号则需要5条线路并行传输，线路的条数称为位宽，一般也对应CPU位宽。</p>
+<p>CPU想要操作内存地址就需要地址总线。</p>
+<p>假设有线路位宽为5，此时CPU想访问内存地址6，那么则通过地址总线传输00110即可，如果此时CPU想访问128，那么传输啥都没用，位宽为5，寻址范围只能在0-31上，可见，位宽决定了CPU能操作的内存大小，32位CPU只能操作<code>2^32</code>(4G)大的内存。</p>
+<div class="note ">
+            <p>所以不要给32位CPU安装8G内存条哦，4G就够了</p>
+          </div>
+
+<p>线路位宽决定了数据传输的能力，那么CPU位宽呢？</p>
+<p>看冯诺依曼模型可知，CPU放着控制单元与逻辑运算单元，CPU位宽决定了这里的计算能力，32位的CPU没法直接加和两个64位大小的数字，需要分高低位加和再组装，而64位计算机则可以直接对64位数字加和，那么CPU位宽则决定了一次能计算多少字节的数据。</p>
+<ul>
+<li>32位CPU一次可以计算4个字节；</li>
+<li>64位CPU一次可以计算8个字节；</li>
+</ul>
+<div class="note ">
+            <p>如果计算的数额不超过32位，此时32位CPU与64位CPU其实没差别</p>
+          </div>
+
+<h2 id="程序执行的基本过程"><a href="#程序执行的基本过程" class="headerlink" title="程序执行的基本过程"></a>程序执行的基本过程</h2><p>程序实际上是一条条指令，所以程序的运行过程就是把每一条指令一步步的执行起来，负责执行指令的就是CPU。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/CPU%E6%89%A7%E8%A1%8C%E7%A8%8B%E5%BA%8F.webp" alt="程序执行的基本过程"></p>
+<ol>
+<li><p>CPU读取<strong>程序计数器</strong>的值，该值即为指令的内存地址，然后<strong>控制单元</strong>操作<strong>地址总线</strong>指定需要访问的内存地址，接着通知内存准备数据，数据准备好后通过<strong>数据总线</strong>传输给CPU，CPU收到数据后将该指令存放到<strong>指令寄存器</strong>。</p>
+</li>
+<li><p>CPU分析指令寄存器中的指令，确定指令的类型以及参数，若是计算类型，则交由<strong>逻辑运算单元</strong>，若是存储类型，则交由<strong>控制单元</strong>。</p>
+</li>
+<li><p>当该指令执行完成后，<strong>程序计数器</strong>自增，自增大小有位宽决定，如果是32位宽，则自增4。</p>
+</li>
+</ol>
+<p>以上过程不断循环，程序便跑起来了，这个循环过程成为<strong>CPU的指令周期</strong>。</p>
+<h2 id="a-1-2执行具体过程"><a href="#a-1-2执行具体过程" class="headerlink" title="a = 1 + 2执行具体过程"></a>a = 1 + 2执行具体过程</h2><p>CPU可不认识什么a = 1 + 2，想要程序跑起来，首先要将其翻译成汇编语言，此过程称为汇编代码。</p>
+<p>针对汇编代码，我们还需要用汇编器翻译成机器码，即01000101011这样的机器语言，此时才可以交由CPU完成执行。</p>
+<p>汇编分为<code>数据段</code>与<code>指令段</code>，分别存放数据与指令。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="数据段与正文段"></p>
+<p>编译器会把<code>a = 1 + 2</code>翻译成4条指令，存放到正文段中。如图，这 4 条指令被存放到了 0x200 ~ 0x20c 的区域中：</p>
+<ul>
+<li>0x200 的内容是 load 指令将 0x100 地址中的数据 1 装入到寄存器 R0；</li>
+<li>0x204 的内容是 load 指令将 0x104 地址中的数据 2 装入到寄存器 R1；</li>
+<li>0x208 的内容是 add 指令将寄存器 R0 和 R1 的数据相加，并把结果存放到寄存器 R2；</li>
+<li>0x20c 的内容是 store 指令将寄存器 R2 中的数据存回数据段中的 0x108 地址中，这个地址也就是变量 a 内存中的地址；</li>
+</ul>
+<h2 id="指令"><a href="#指令" class="headerlink" title="指令"></a>指令</h2><p>编译期在编译程序时，会构造指令，这个过程成为指令的编码。CPU执行程序时，就会解析指令，这个过程称为指令的解码。</p>
+<p>现代CPU使用流水线方式执行指令，流水线方式将一条指令拆成四个阶段，如下图：</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="流水线执行模式"></p>
+<ol>
+<li><p><strong>Fetch</strong> -&gt; CPU通过程序计数器读取对应的内存地址的指令（获取指令）</p>
+</li>
+<li><p><strong>Decode</strong> -&gt; CPU对指令进行解码（指令译码）</p>
+</li>
+<li><p><strong>Execution</strong> -&gt; CPU执行指令（执行指令）</p>
+</li>
+<li><p><strong>Store</strong> -&gt; 将计算结果存回到寄存器或者将寄存器的值存回内存（数据回写）</p>
+</li>
+</ol>
+<p>上面4个阶段，称为<strong>指令周期</strong>，CPU的工作就是一个接着一个执行，周而复始，事实上，不同的阶段有计算机的不同组件完成：</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-cpu-execute/%E6%95%B0%E6%8D%AE%E6%AE%B5%E4%B8%8E%E6%AD%A3%E6%96%87%E6%AE%B5.webp" alt="指令周期"></p>
+<ul>
+<li>取指令的阶段，我们的指令是存放在<strong>存储器</strong>里的，实际上，通过程序计数器和指令寄存器取出指令的过程，是由<strong>控制器</strong>操作的；</li>
+<li>指令的译码过程，也是由<strong>控制器</strong>进行的；</li>
+<li>指令执行的过程，无论是进行算术操作、逻辑操作，还是进行数据传输、条件分支操作，都是由<strong>算术逻辑单元操作</strong>的，也就是由<strong>运算器</strong>处理的。但是如果是一个简单的无条件地址跳转，则是直接在<strong>控制器</strong>里面完成的，不需要用到运算器。</li>
+</ul>
+<h3 id="指令的类型"><a href="#指令的类型" class="headerlink" title="指令的类型"></a>指令的类型</h3><p>指令从功能角度划分，可以分为 5 大类：</p>
+<ul>
+<li>数据传输类型的指令，比如 <code>store/load</code> 是寄存器与内存间数据传输的指令，<code>mov</code> 是将一个内存地址的数据移动到另一个内存地址的指令；</li>
+<li>运算类型的指令，比如加减乘除、位运算、比较大小等等，它们最多只能处理两个寄存器中的数据；</li>
+<li>跳转类型的指令，通过修改程序计数器的值来达到跳转执行指令的过程，比如编程中常见的 <code>if-else</code>、<code>swtich-case</code>、函数调用等。</li>
+<li>信号类型的指令，比如发生中断的指令 <code>trap</code>；</li>
+<li>闲置类型的指令，比如指令 <code>nop</code>，执行后 CPU 会空转一个周期</li>
+</ul>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>CPU</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>CPU是怎么执行任务的？</title>
+    <url>/2022/01/27/how-to-the-cpu-execute-task/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><h2 id="CPU是如何读写数据的？"><a href="#CPU是如何读写数据的？" class="headerlink" title="CPU是如何读写数据的？"></a>CPU是如何读写数据的？</h2><p>先简单看下CPU的架构图：</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/CPU%E6%9E%B6%E6%9E%84.jpg" alt="CPU架构"></p>
+<p>一个CPU通常有多个CPU核心，每个核心又有自己L1 L2 CPU Cache，多个核心之间共享L3 CPU Cache，当缓存未命中后再去内存寻找，还没有则接着再去Disk层寻找，由上到下读写读写速度依次减慢。</p>
+<p>更多关于CPU与内存交互的文章：</p>
+<ul>
+<li><a href="/2022/01/24/memory-hierarchy/" title="存储器的层次结构">存储器的层次结构</a></li>
+<li><a href="/2022/01/25/cpu-cache/" title="CPU Cache 介绍">CPU Cache 介绍</a></li>
+</ul>
+<h3 id="什么是CPU伪共享"><a href="#什么是CPU伪共享" class="headerlink" title="什么是CPU伪共享"></a>什么是CPU伪共享</h3><p>伪共享的出现与CPU Cache的缓存机制脱不开关系，我们先看下CPU Cache是如何缓存数据的。<br>当CPU想要从内存读某个数据时，会先去CPU Cache寻找，若没有，CPU Cache则会把对应的内存数据缓存，而这里不会只缓存CPU需要的那一个数据，他会将相连范围的一小块数据都缓存下来。（为什么这样做呢？我们认为，与CPU刚刚使用过的数据所相邻的数据，很有可能会被CPU调用。缓存一整块数据可以减少CPU与内存直接交互的频率。）</p>
+<p>那我们来看下伪共享是什么，举个例子。</p>
+<p>假设有两个核心CPU在运行两个不同的线程，CPU A用到变量a，CPU B用到变量b，a和b在内存地址上相邻。</p>
+<ol>
+<li>A只修改a，B只修改b。</li>
+<li>A读取a，由于ab相邻，他俩都被缓存到了一个Cache Line中，<em>A Cache Line</em>此时状态为Exclusive。</li>
+<li>B读取b，由于ab相邻，也被缓存到了B的Cache Line中，此时<em>A Cache Line</em>与<em>B Cache Line</em>变为Shared。</li>
+<li>A修改a，此时<em>A Cache Line</em>变为Modified，而<em>B Cache Line</em>变为Invalidate。</li>
+<li>B修改b，因为B为Invalidate，则先通知A将数据写回到内存中，并变为Invalidate，B从内存中重新读取，并对b做修改，变为Modified。</li>
+</ol>
+<p>若上述4-5步骤交替重复的话，CPU Cache的机制便失效了，称其为伪共享。</p>
+<h4 id="怎么避免伪共享呢？"><a href="#怎么避免伪共享呢？" class="headerlink" title="怎么避免伪共享呢？"></a>怎么避免伪共享呢？</h4><p>其实很简单，对于可能位于多线程并被高频率修改的数据尽量使其独占一个Cache Line就可以了，即空间换时间的做法。</p>
+<p>Java Disruptor 的 RingBuffer也是这么做的，具体细节可自查。</p>
+<h2 id="CPU是如何选择线程的？"><a href="#CPU是如何选择线程的？" class="headerlink" title="CPU是如何选择线程的？"></a>CPU是如何选择线程的？</h2><p>在Linux内核中，线程与进程都是用<code>task_strcut</code>结构体表示的，所以CPU是如何执行任务的，任务其实就是指就是<code>task_strcut</code>。在Linux中，线程共享了进程已经创建的资源，包括内存地址空间、代码段、文件描述符，等等。所以Linux的线程又被称为轻量级进程。</p>
+<p>在Linux系统中，根据任务的优先级以及相应要求，分为以下两种：</p>
+<ul>
+<li>实时任务，优先级0~99，优先级很高。</li>
+<li>普通任务，优先级100~139，对响应的要求没那么高。</li>
+</ul>
+<h3 id="调度类"><a href="#调度类" class="headerlink" title="调度类"></a>调度类</h3><p>为了保障优先级高的任务尽可能的被执行，于是分了以下几种调度类：<br><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/%E8%B0%83%E5%BA%A6%E7%B1%BB.webp" alt="调度类"></p>
+<p><code>Deadline</code>与<code>Realtime</code>都用于实时任务，对任务执行有以下三种策略：</p>
+<ul>
+<li>SCHED_DEADLINE：距离deadline越近的任务越先执行。</li>
+<li>SCHED_FIFO：对于相同优先级的任务，按照先来先服务的原则，对应高优先级的任务，可以插队。</li>
+<li>SCHED_RR：对于相同优先级的任务，轮流着运行，每个任务都有一定的时间片，用完时间片后就被放到尾部，对于高优先级的任务，同理可插队。</li>
+</ul>
+<p>而 Fair 调度类是应用于普通任务，都是由 <code>CFS</code> 调度器管理的，分为两种调度策略：</p>
+<ul>
+<li>SCHED_NORMAL：普通任务使用的调度策略；</li>
+<li>SCHED_BATCH：后台任务的调度策略，不和终端进行交互，因此在不影响其他需要交互的任务，可以适当降低它的优先级。</li>
+</ul>
+<h3 id="CFS调度器（完全公平调度）"><a href="#CFS调度器（完全公平调度）" class="headerlink" title="CFS调度器（完全公平调度）"></a>CFS调度器（完全公平调度）</h3><p>对于普通任务来说，只有公平才是最重要的。Linux中，实现了一个基于CFS（Completely Fair Scheduling）的调度算法，也就是完全公平调度。<br>该算法的理念是让分配给每个任务的CPU时间相同，它为每个任务定义了一个虚拟运行时间，vruntime,如果一个任务在运行，且运行时间越久，该任务的vruntime自然越大，而没有被运行的任务，vruntime是不会变化的。<br>那么，在CFS算法调度中，会优先选择vruntime少的任务，以保证每个任务的公平性。<br>上面的选择方式保证了每个任务的公平性，但是没有考虑优先级的问题，这里又引入了权重值的概念，用来调整vruntime的大小。权重值越大，vruntime就会被调整的越小。这里有一条计算公式。</p>
+<blockquote>
+<p>vruntime（虚拟运行时间） = delta_exec（实际运行时间）* NICE_0_LOAD/权重<br>权重值是根据优先级转换得到的。</p>
+</blockquote>
+<h3 id="CPU运行队列"><a href="#CPU运行队列" class="headerlink" title="CPU运行队列"></a>CPU运行队列</h3><p>一个系统通常都会运行着很多任务，任务数量基本都远超核心数量，因此就需要排队。<br>事实上，每个CPU都有自己的运行队列（Run Queue，RQ），用于描述在此CPU上所运行的所有进程，其队列包含三个运行队列，Deadline（dl_rq）、Runtime（rt_rq）、CFS（cfs_rq）。其中cfs_<br>rq是用红黑树来描述的，按照vruntime大小排序，最左侧的叶子节点，就是下次会被调度的任务。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/CPU%E9%98%9F%E5%88%97.webp" alt="CPU队列"></p>
+<p>这三个队列的调度也是有优先级的，dl_rq &gt; rt_rq &gt; cfs_rq，实时任务总要比普通任务优先被执行。</p>
+<h3 id="调整优先级"><a href="#调整优先级" class="headerlink" title="调整优先级"></a>调整优先级</h3><p>如果我们启动一个任务的时候没有指定优先级，默认被认为是普通任务，放在cfs_rq中，有CFS调度器来进行管理。</p>
+<p>如果想要某个普通任务有更多的执行时间，可以调整任务的<code>nice</code>值，从而让优先级高的任务拥有更多的执行时间。<code>nice</code>值得设置范围为<code>-20 ~ 19</code>，值越低则优先级越高。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/%E4%BC%98%E5%85%88%E7%BA%A7.webp" alt="nice值与优先级的映射"></p>
+<p>上图可以看到普通任务的优先级范围为100<del>139，nice值映射为-20</del>19。<br>在启动任务时，可以指定nice值</p>
+<figure class="highlight shell"><figcaption><span>linux</span></figcaption><table><tr><td class="code"><pre><span class="line">nice -n -3 /usr/sbin/mysqld</span><br></pre></td></tr></table></figure>
+
+<p>也可以使用renice重新设置</p>
+<figure class="highlight shell"><figcaption><span>linux</span></figcaption><table><tr><td class="code"><pre><span class="line">renice -n -10 /usr/sbin/mysqld</span><br></pre></td></tr></table></figure>
+
+<p>当你启动一个普通任务时，优先级的值可以认为固定为120，你可以使用<code>nice</code>来调整优先级</p>
+<blockquote>
+<p>优先级（新）= nice + 优先级（old）</p>
+</blockquote>
+<p>还记得前面的vruntime计算公式吗。</p>
+<blockquote>
+<p>vruntime（虚拟运行时间） = delta_exec（实际运行时间）* NICE_0_LOAD/权重<br>权重与nice值之间是有转换表的</p>
+</blockquote>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/%E6%9D%83%E9%87%8Dnice%E8%BD%AC%E6%8D%A2%E8%A1%A8.png" alt="权重nice转换表"></p>
+<blockquote>
+<p>weight = 1024 / 1.25nice</p>
+</blockquote>
+<p>每降低1nice值，将多获得10%CPU时间。</p>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>CPU</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Int 0x80</title>
+    <url>/2022/03/02/int-0x80/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><h2 id="什么是系统调用"><a href="#什么是系统调用" class="headerlink" title="什么是系统调用"></a>什么是系统调用</h2><p>上层应用是怎么使用操作系统的呢？操作系统提供系统调用来供上层应用来和操作系统交互，就相当于<strong>OS为上层应用暴露了一堆接口，应用使用这些接口来完成相应的功能</strong>。举个例子，当你使用<code>printf(&quot;hello, world!&quot;);</code>时，<code>printf</code>是怎么把 <em>hello, world!</em> 输出到控制台上的呢？这里就是<code>printf</code>通过系统调用接口<code>write</code>，将其输出到了控制台上。那为什么不是<code>printf</code>直接将内容输出，还要通过系统调用<code>write</code>来做呢？展示控制台的这个屏幕，称其为显存，说白了就是一块硬件，那么你在屏幕上显示<code>hello, world!</code>，其实就是在往显存这个硬件中<strong>写入数据</strong>，而往硬件中<strong>写入数据</strong>是进程控制CPU去做的，也就是内核部分做的事情，所以<code>write</code>这个动作就属于系统调用了，需要使用内核态去完成<code>write</code>这个动作。那么就知道了为什么<code>printf</code>不能直接在屏幕输出内容，在屏幕输出内容相当于在硬件写入数据，需要内核态去做这件事，而<code>printf</code>属于用户态，是没有办法直接访问内核数据的，所以需要借助提供出来的<code>write</code>系统调用接口来完成。</p>
+<h2 id="操作系统如何进行权限控制"><a href="#操作系统如何进行权限控制" class="headerlink" title="操作系统如何进行权限控制"></a>操作系统如何进行权限控制</h2><p>上面提到了用户态和内核态，那么怎么区别正在执行的程序是属于内核态还是用户态呢，程序也就是一条条指令，也就是怎么区别当前的指令属于用户态还是内核态，就是通过该指令的地址判断的：<code>CS:IP</code>。</p>
+<blockquote>
+<p>CS和IP是8086CPU中两个关键的寄存器，它们指示了CPU当前要读取指令的地址。CS : 代码段寄存器；IP : 指令指针寄存器。在8086机中，任意时刻，CPU将CS:IP指向的内容当作指令来执行。</p>
+</blockquote>
+<p>通过该指令的地址<code>CS:IP</code>，<code>CS</code>的低两位表示当前处于内核态还是用户态，0表示内核态，1表示用户态。当当前指令的CPL &lt;= 要访问的数据段DPL时，才能够进行访问。</p>
+<blockquote>
+<p>CPL:当前内存段的特权级。DPL:目标内存段的特权级。</p>
+</blockquote>
+<h2 id="printf-“hello-world-”-源码解析"><a href="#printf-“hello-world-”-源码解析" class="headerlink" title="printf(“hello, world!”)源码解析"></a>printf(“hello, world!”)源码解析</h2><p>前面我们提到了，<code>printf</code>函数通过系统调用<code>write</code>函数，将内容输出到显存上。其中还涉及到了用户态到内核态的转变，但是用户态的内存 CPL = 3，内核态的内存段 DPL = 0，本来是不能访问的，这里是怎么做到用户态调用内核态代码的呢？我们一点点来分析。</p>
+<p>这里我们以linux.011举例，<code>printf</code>函数最终会调用到内核态的<code>sys_write</code>（_syscall3宏展开）</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> <span class="title function_">printf</span> <span class="params">(<span class="type">const</span> <span class="type">char</span> *format, ...)</span> &#123;</span><br><span class="line">    ...</span><br><span class="line">    _syscall3(<span class="type">int</span>,write,<span class="type">int</span>,fd,<span class="type">const</span> <span class="type">char</span> *,buf,<span class="type">off_t</span>,count)</span><br><span class="line">    ...</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><figcaption><span>include/unistd.h</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> _syscall3(type,name,atype,a,btype,b,ctype,c) \</span></span><br><span class="line"><span class="meta">type name(atype a,btype b,ctype c) \</span></span><br><span class="line"><span class="meta">&#123; \</span></span><br><span class="line"><span class="meta">long __res; \</span></span><br><span class="line"><span class="meta">__asm__ volatile (<span class="string">&quot;int $0x80&quot;</span> \</span></span><br><span class="line"><span class="meta">    : <span class="string">&quot;=a&quot;</span> (__res) \</span></span><br><span class="line"><span class="meta">    : <span class="string">&quot;0&quot;</span> (__NR_##name),<span class="string">&quot;b&quot;</span> ((long)(a)),<span class="string">&quot;c&quot;</span> ((long)(b)),<span class="string">&quot;d&quot;</span> ((long)(c))); \</span></span><br><span class="line"><span class="meta"><span class="keyword">if</span> (__res&gt;=0) \</span></span><br><span class="line"><span class="meta">    return (type) __res; \</span></span><br><span class="line"><span class="meta">errno=-__res; \</span></span><br><span class="line"><span class="meta">return -1; \</span></span><br><span class="line"><span class="meta">&#125;</span></span><br></pre></td></tr></table></figure>
+
+<p>这里使用了一段内联汇编代码+宏，将宏展开后其实就是标准的write函数，这里不做代入，来看下这里最关键的<code>int 0x80</code>，也是本文要描述的重点对象。</p>
+<h3 id="int-0x80"><a href="#int-0x80" class="headerlink" title="int 0x80"></a>int 0x80</h3><p><code>int 0x80</code>怎么解释呢，<code>int</code>是一个中断指令，0x80代表使用<code>idt</code>表中位与0x80位置的中断处理函数来进行中断处理。那么这里又牵扯到了<code>idt</code>表，他又是个什么东西呢。</p>
+<blockquote>
+<p>idt表: 在发生中断时，会选择一个中断处理函数去执行，idt表就是一个存放了所有中断处理函数地址的数组，当执行<code>int 0x80</code>的时候，就是从<code>idt</code>表中取出<code>0x80</code>对应存放的中断处理函数地址，并执行该中断处理函数。<em>除了idt表外，还有gdt、ldt，详细可查阅资料了解。</em></p>
+</blockquote>
+<p>也就是说，在执行<code>int 0x80</code>的时候，就直接跳到了内核态，我们来看下<code>int 0x80</code>到底做了些什么。</p>
+<h3 id="idt-0x80-初始化过程"><a href="#idt-0x80-初始化过程" class="headerlink" title="idt[0x80] 初始化过程"></a>idt[0x80] 初始化过程</h3><figure class="highlight c"><figcaption><span>kernel/sched.c</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="type">void</span> <span class="title function_">sched_init</span><span class="params">(<span class="type">void</span>)</span> &#123;</span><br><span class="line">    ...</span><br><span class="line">    set_system_gate(<span class="number">0x80</span>,&amp;system_call);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><figcaption><span>include/asm/system.h</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> set_system_gate(n,addr) _set_gate(&amp;idt[n],15,3,addr)</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><figcaption><span>include/asm/system.h</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">define</span> _set_gate(gate_addr,type,dpl,addr) \</span></span><br><span class="line"><span class="meta">__asm__ (<span class="string">&quot;movw %%dx,%%ax\n\t&quot;</span> \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;movw %0,%%dx\n\t&quot;</span> \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;movl %%eax,%1\n\t&quot;</span> \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;movl %%edx,%2&quot;</span> \</span></span><br><span class="line"><span class="meta">    : \</span></span><br><span class="line"><span class="meta">    : <span class="string">&quot;i&quot;</span> ((short) (0x8000+(dpl&lt;&lt;13)+(type&lt;&lt;8))), \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;o&quot;</span> (*((char *) (gate_addr))), \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;o&quot;</span> (*(4+(char *) (gate_addr))), \</span></span><br><span class="line"><span class="meta">    <span class="string">&quot;d&quot;</span> ((char *) (addr)),<span class="string">&quot;a&quot;</span> (0x00080000))</span></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><figcaption><span>idt数据结构</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="keyword">typedef</span> <span class="class"><span class="keyword">struct</span> <span class="title">desc_struct</span> &#123;</span></span><br><span class="line">    <span class="type">unsigned</span> <span class="type">long</span> a,b;</span><br><span class="line">&#125; desc_table[<span class="number">256</span>];</span><br><span class="line"></span><br><span class="line"><span class="keyword">extern</span> desc_table idt,gdt;</span><br></pre></td></tr></table></figure>
+
+<p><code>sched_init</code>调用了<code>_set_gate(&amp;idt[0x80], 15, 3, &amp;system_call)</code>，这里的<code>system_call</code>就是系统调用，我们将这里的四个参数一一对应下</p>
+<ul>
+<li>gate_addr -&gt; idt[0x80]，gate_addr就是idt表中下标为0x80的那个元素，根据idt的数据结构能看出，一个idt有64位。</li>
+<li>type: 15，这个跟类型相关的不是关注重点，可以忽略。</li>
+<li>dpl: 3，前面我们提到cpl为当前指令特权级，dpl为目标段特权级，可想而知，这里可能将目标段指令dpl置为了3</li>
+<li>addr -&gt; 指中断处理函数地址，即<code>system_call</code>的地址</li>
+</ul>
+<p>根据参数，我们大概可以推测出来一些东西，我们要将<strong>中断处理函数的地址</strong>、<strong>type</strong>、<strong>dpl</strong>全部塞到大小为<strong>64bit</strong>的idt[0x80]中，接下来就是解释下这段汇编做了什么就能理解怎么塞的了。<br>我用伪代码的形式重新描述下</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="comment">// init</span></span><br><span class="line"><span class="type">char</span>* edx = addr <span class="comment">// edx寄存器保存system_call地址 -&gt; &quot;d&quot; ((char *) (addr))</span></span><br><span class="line"><span class="type">char</span>* eax = <span class="number">0x0008</span> <span class="number">0000</span> <span class="comment">// eax寄存器置为0x0008 0000 -&gt; &quot;a&quot; (0x00080000))</span></span><br><span class="line"></span><br><span class="line">eax = edx &amp; <span class="number">0x0000</span> <span class="number">1111</span> <span class="comment">// 将system_call地址的低16位赋值给eax的低16位 -&gt; movw %%dx,%%ax</span></span><br><span class="line"></span><br><span class="line">edx = edx &amp; <span class="number">0x1111</span> <span class="number">0000</span> &amp; (<span class="number">0x8000</span>+(dpl&lt;&lt;<span class="number">13</span>)+(type&lt;&lt;<span class="number">8</span>)) <span class="comment">// 将dpl和type位移到对应的位置，赋值给edx的低16位</span></span><br><span class="line"></span><br><span class="line">idt[<span class="number">0x80</span>].a = eax <span class="comment">// 将eax赋值到idt[0x80]的低32位 -&gt; movl %%eax,%1    (*((char *) (gate_addr)))</span></span><br><span class="line"></span><br><span class="line">idt[<span class="number">0x80</span>].b = ebx <span class="comment">// 将ebx赋值到idt[0x80]的高32位 -&gt; movl %%edx,%2    (*(4+(char *) (gate_addr)))</span></span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<p>赋值完成，接下来我们看下idt详细的数据结构。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">gate_struct</span> &#123;</span></span><br><span class="line">  u16     offset_low;</span><br><span class="line">  u16     segment;</span><br><span class="line">  <span class="class"><span class="keyword">struct</span> <span class="title">idt_bits</span> <span class="title">bits</span>;</span></span><br><span class="line">  u16     offset_middle;</span><br><span class="line"><span class="meta">#<span class="keyword">ifdef</span> CONFIG_X86_64</span></span><br><span class="line">  u32     offset_high;</span><br><span class="line">  u32     reserved;</span><br><span class="line"><span class="meta">#<span class="keyword">endif</span></span></span><br><span class="line">&#125; __attribute__((packed));</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="class"><span class="keyword">struct</span> <span class="title">idt_bits</span> &#123;</span></span><br><span class="line">   u16     ist : <span class="number">3</span>,</span><br><span class="line">           zero    : <span class="number">5</span>,</span><br><span class="line">           type    : <span class="number">5</span>,</span><br><span class="line">           dpl : <span class="number">2</span>,</span><br><span class="line">           p   : <span class="number">1</span>;</span><br><span class="line">&#125; __attribute__((packed));</span><br></pre></td></tr></table></figure>
+
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/int-0x80/idt%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84.jpg" alt="idt数据结构"></p>
+<p>那么我们再来想下，这里的系统调用是怎么实现用户态代码CPL = 3，调用到DPL = 0的内核中断处理函数的</p>
+<ol>
+<li>用户态代码访问idt[0x80]</li>
+<li>用户态代码CPL与idt[0x80]的DPL都为3，可以访问</li>
+<li>使用idt[0x80]查询<code>system_call</code>的地址，此时会使用到段选择符</li>
+<li>这里的段选择符为<code>0x0008</code>，段选择符就是用来访问<code>system_call</code>代码段地址的<code>CS</code>，展开为<code>CS=0000000000001000</code>，前面讲到CS的末两位即为<code>CPL</code>，也就是说中断处理函数的代码段地址CPL = 0</li>
+<li>所以总结来看，就是idt[0x80]帮助我们完成了用户态代码调用内核态的过程。</li>
+</ol>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Linux内核启动源码与流程分析（一）</title>
+    <url>/2022/07/21/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%BA%90%E7%A0%81%E4%B8%8E%E6%B5%81%E7%A8%8B%E5%88%86%E6%9E%90/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><h2 id="从开机到执行linux的main函数过程"><a href="#从开机到执行linux的main函数过程" class="headerlink" title="从开机到执行linux的main函数过程"></a>从开机到执行linux的main函数过程</h2><p>开机的时候 80x86的CPU自动进入实模式，从地址0xFFFF0开始自动执行程序代码，这个地址即是ROM-BIOS的地址，BIOS将执行一些系统检测，并在绝对物理地址0初始化BIOS中断向量，然后，将可启动设备的第一个扇区（称磁盘引导扇区，512byte）读入内存绝对地址0x7c00, 并跳转至该处执行，至此，就完成了内核初始化的工作。</p>
+<h3 id="bootsect-s"><a href="#bootsect-s" class="headerlink" title="bootsect.s"></a>bootsect.s</h3><p>Linux最最前面的程序是<code>bootsect.s</code>，将被BIOS加载到内存绝对地址0x7c00处，他将完成以下操作</p>
+<ul>
+<li>将自己移动到0x90000处</li>
+<li>将启动设备中后2KB代码（boot/setup.s）读入到0x90200处</li>
+<li>将内核其他部分（system）读入到0x10000处</li>
+<li>完成以上操作后，还会做一些其他检测工作，不是我们关注的重点，忽略</li>
+<li>完成代码加载和一些初始化工作后，执行<code>jmpi  0, SETUPSEG</code>这里<code>SETUPSEG =0x90200</code>，跳到setup.s去执行。</li>
+</ul>
+<p>下图前三个场景就是bootsect.s干的</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B/bootsect%E6%97%B6%E5%86%85%E5%AD%98%E7%8A%B6%E6%80%81.png" alt="启动引导时内核在内存的位置"></p>
+<h3 id="setup-s"><a href="#setup-s" class="headerlink" title="setup.s"></a>setup.s</h3><p><code>setup.s</code>是一个操作系统加载程序，他的主要作用是利用BIOS中断读取机器系统数据，并保存到0x90000处，以供内核使用。</p>
+<p>所取得的参数和保留的位置如下：</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B/clipboard_20220721_045100.png"></p>
+<p>前面<code>bootsect.s</code>将内核代码放置到了0x10000起始处，目的就是为了不把加载到0地址的BIOS中断覆盖掉，<code>setup.s</code>以及完成对BIOS中断的利用，参数也全部保存了起来，那么就可以移动内核代码到地址0处了。</p>
+<figure class="highlight x86asm"><table><tr><td class="code"><pre><span class="line">    <span class="keyword">mov</span> <span class="built_in">ax</span>, #<span class="number">0x0000</span></span><br><span class="line">    <span class="keyword">cld</span>     ! <span class="string">&#x27;direction&#x27;</span>=<span class="number">0</span>, movs moves forward</span><br><span class="line"><span class="symbol">do_move:</span></span><br><span class="line">    <span class="keyword">mov</span> <span class="built_in">es</span>,<span class="built_in">ax</span>   ! destination <span class="meta">segment</span></span><br><span class="line">    <span class="keyword">add</span> <span class="built_in">ax</span>, #<span class="number">0x1000</span></span><br><span class="line">    <span class="keyword">cmp</span> <span class="built_in">ax</span>, #<span class="number">0x9000</span></span><br><span class="line">    <span class="keyword">jz</span> end_move</span><br><span class="line">    <span class="keyword">mov</span> <span class="built_in">ds</span>,<span class="built_in">ax</span>  ! source <span class="meta">segment</span></span><br><span class="line">    <span class="keyword">sub</span> <span class="built_in">di</span>,<span class="built_in">di</span></span><br><span class="line">    <span class="keyword">sub</span> <span class="built_in">si</span>,<span class="built_in">si</span></span><br><span class="line">    <span class="keyword">mov</span>  <span class="built_in">cx</span>, #<span class="number">0x8000</span></span><br><span class="line">    <span class="keyword">rep</span></span><br><span class="line">    <span class="keyword">movsw</span></span><br><span class="line">    <span class="keyword">jmp</span> do_move</span><br></pre></td></tr></table></figure>
+
+<p>完成移动后：</p>
+<figure class="highlight x86asm"><table><tr><td class="code"><pre><span class="line"><span class="symbol">end_move:</span></span><br><span class="line">    <span class="keyword">mov</span> <span class="built_in">ax</span>,#SETUPSEG    ! right, forgot this <span class="meta">at</span> first. didn<span class="string">&#x27;t work :-)</span></span><br><span class="line"><span class="string">    mov ds,ax</span></span><br><span class="line"><span class="string">    lidt    idt_48      ! load idt with 0,0</span></span><br><span class="line"><span class="string">    lgdt    gdt_48      ! load gdt with whatever appropriate</span></span><br></pre></td></tr></table></figure>
+
+<p>这里加载了两个临时的gdt和idt表，主要看gdt表：</p>
+<p>代码段：<code>0x00C0 9A00 0000 07FF</code>，表示段长为8M，基地址为0，可读可执行</p>
+<p>数据段：<code>0x00C0 9200 0000 07FF</code>，表示段长为8M，基地址为0，可读可写</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B/clipboard_20220721_053211.png" alt="代码段与数据段描述符格式"></p>
+<blockquote>
+<p>lgdt指令：要求6字节操作数，前2字节为gdt表限长，后四字节为gdt表基地址。以gdt_48为例，<code>.word 0x800</code>即限长为2048个字节，根据一个gdt表占8个字节，这里即有256个gdt表项。<code>.word 512+gdt, 0x9</code>，即0x90200 + gdt，即指向该段程序的gdt表的地址。</p>
+</blockquote>
+<figure class="highlight x86asm"><table><tr><td class="code"><pre><span class="line"><span class="symbol">gdt:</span></span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>,<span class="number">0</span>     ! dummy</span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0x07FF</span>      ! 8Mb - limit=<span class="number">2047</span> (<span class="number">2048</span>*<span class="number">4096</span>=8Mb)</span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0x0000</span>      ! base address=<span class="number">0</span></span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0x9A00</span>      ! code read/exec</span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0x00C0</span>      ! granularity=<span class="number">4096</span>, <span class="number">386</span></span><br><span class="line"><span class="meta"></span></span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0x07FF</span>      ! 8Mb - limit=<span class="number">2047</span> (<span class="number">2048</span>*<span class="number">4096</span>=8Mb)</span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0x0000</span>      ! base address=<span class="number">0</span></span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0x9200</span>      ! data read/write</span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0x00C0</span>      ! granularity=<span class="number">4096</span>, <span class="number">386</span></span><br><span class="line"><span class="symbol"></span></span><br><span class="line"><span class="symbol">idt_48:</span></span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0</span>           ! idt limit=<span class="number">0</span></span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0</span>,<span class="number">0</span>         ! idt base=0L</span><br><span class="line"><span class="symbol"></span></span><br><span class="line"><span class="symbol">gdt_48:</span></span><br><span class="line"><span class="meta">    .word</span>   <span class="number">0x800</span>       ! gdt limit=<span class="number">2048</span>, <span class="number">256</span> GDT entries</span><br><span class="line"><span class="meta">    .word</span>   <span class="number">512</span>+gdt,<span class="number">0x9</span> ! gdt base = 0X9xxxx</span><br></pre></td></tr></table></figure>
+
+<p>来看最后也是最关键的代码:</p>
+<figure class="highlight x86asm"><table><tr><td class="code"><pre><span class="line"><span class="keyword">mov</span> <span class="built_in">ax</span>,#<span class="number">0x0001</span>      ! protected mode (PE) bit</span><br><span class="line">    <span class="keyword">lmsw</span>    <span class="built_in">ax</span>      ! This is it!</span><br><span class="line">    jmpi    <span class="number">0</span>,<span class="number">8</span>     ! <span class="keyword">jmp</span> offset <span class="number">0</span> of <span class="meta">segment</span> <span class="number">8</span> (<span class="built_in">cs</span>)</span><br></pre></td></tr></table></figure>
+
+<p>lmws将修改CR0寄存器，完成实模式到保护模式的切换，此时我们就无法直接跳转物理地址了，而必须借助段选择符来完成跳转，所以来看这段指令<code>jmpi 0,8</code>，即offset:0，段选择符8（0000 0000 0000 1000），下面是段选择符的数据结构：<br>那么这里的描述符引索即为：0000 0000 0000 1，TI：0，RPL：0，即选择到了我们第一个gdt表，也即内核代码段，根据段描述符，可知要跳转的地址为物理地址0，此时我们就跳转到了system代码段，并在那里开始执行，而system代码段的头部代码就是<code>head.s</code>，即开始执行<code>heads.s</code></p>
+<p>实模式到保护模式的切换，即寻址方式发生了改变，这是非常重要的一步，实模式下，仅有20位寻址能力，仅有1M，而计算机希望拥有更大的寻址空间，显然20位寻址能力绝对不满足，那怎么切换到更大的寻址模式呢，即切换到保护模式，将寻址能力提升到32位，这个时候内存就变成很大了，那么他是怎么做到这件事的呢？即是改变了指令的解释模式，拿jmpi  0，8举例，这里的8就不在是段了，而是寻找段描述符，利用段描述符去寻找实际的段地址，完成实际的跳转。那么是怎么改变指令的解释模式的呢？即是通过修改CR0寄存器的值。</p>
+<p>实模式下：CS左移四位+IP</p>
+<p>保护模式下：CS变成了段选择子，来寻找gdt表，寻找到相应的段选择符，从中找到基址再与IP相加，找到对应的实际地址。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B/clipboard_20220721_054347.png"></p>
+<h3 id="head-s"><a href="#head-s" class="headerlink" title="head.s"></a>head.s</h3><p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B/clipboard_20220721_055219.png" alt="此时内存的样子"></p>
+<p>head.s程序在编译成目标生成文件后会和内核其他程序一起链接成system模块，位于system模块的头部，这也是被称为是<code>heads</code>的原因，从这里开始，程序就完全运行在保护模式下了，<code>heads.s</code>使用的是AT&amp;T汇编语言。</p>
+<p>这段程序实际上处于内存绝对地址0处开始的地方，程序功能也比较单一。</p>
+<ul>
+<li>加载各个数据段寄存器</li>
+<li>重新设置中断描述符表idt</li>
+<li>重新设置全局描述符表gdt</li>
+<li>检测A20是否开启</li>
+<li>设置内存管理的分页处理机制，放置在绝对内存地址0的地方，会将head.s的部分程序覆盖</li>
+<li>最后，利用返回指令将预先放置的在堆栈中的<code>main.c</code>程序入口地址弹出，此时开始运行<code>main.c</code></li>
+</ul>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B/clipboard_20220721_081728.png" alt="此时内存的样子"></p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/linux%E5%86%85%E6%A0%B8%E5%90%AF%E5%8A%A8%E6%B5%81%E7%A8%8B/clipboard_20220721_081508.png" alt="GDT描述符表"></p>
+<h2 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h2><p>笔记的描述并没有分析太多源码，因为本身做的操作都是比较简单的逻辑，移动代码以及初始化工作，汇编源码我们还是不心力去看去学习了，建议有兴趣研究的同学可以配合linux0.11+《linux内核完全注释》这本书去看，理解源码的过程尽管费时费事，但收获还是颇多的。</p>
+]]></content>
+      <tags>
+        <tag>linux</tag>
+        <tag>linux_0.11</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Linux块设备读写过程</title>
+    <url>/2022/08/07/linux%E5%9D%97%E8%AE%BE%E5%A4%87%E8%AF%BB%E5%86%99%E8%BF%87%E7%A8%8B/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>先来想下，块设备涉及到什么，块设备属于IO设备，涉及到读写，与字符流设备不同的点就在于能够根据块来进行读写，仅取自己想要的块就OK，我们忽略块设备和字符流设备的区别，那么块设备作为IO设备，最重要的作用就是IO，即读写数据。体现到我们平常的使用则是<code>read</code> <code>write</code>，这些。学习块设备主要要学习的就两步，一是对于linux来说一切皆文件，那么一个文件的路径，是如何映射到块设备对应的块的，二是块设备上的数据是怎么与内存交互的，即怎么读进来的。</p>
+<p>从源码开始，分析linux0.11的源码，从中梳理过程，带着上面我们提到的两个疑问，开始阅读代码</p>
+<h3 id="从open开始"><a href="#从open开始" class="headerlink" title="从open开始"></a>从<code>open</code>开始</h3><p><code>open</code>都清楚，打开一个文件，那么涉及到的就是文件与IO设备的映射关系。我们从fs/open.c的<code>sys_open</code>函数说起：</p>
+<figure class="highlight c"><figcaption><span>fs/open.c</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * filename: 文件路径</span></span><br><span class="line"><span class="comment"> * flag：打开文件的标志，只读，只写，读写，创建</span></span><br><span class="line"><span class="comment"> * mode：用于指定文件的许可属性，在创建时需要，指定文件权限。</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="type">int</span> <span class="title function_">sys_open</span><span class="params">(<span class="type">const</span> <span class="type">char</span> * filename, <span class="type">int</span> flag, <span class="type">int</span> mode)</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="comment">//...省略一些代码</span></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * 查找空闲文件句柄</span></span><br><span class="line"><span class="comment">     * filp的定义是*struct file * filp[NR_OPEN]*，是一个文件指针数组，保存着当前打开的所有文件的指针，linux0.11最大允许同时打开64个文件</span></span><br><span class="line"><span class="comment">     **/</span></span><br><span class="line">    <span class="keyword">for</span>(fd=<span class="number">0</span> ; fd&lt;NR_OPEN ; fd++)</span><br><span class="line">        <span class="keyword">if</span> (!current-&gt;filp[fd])</span><br><span class="line">            <span class="keyword">break</span>;</span><br><span class="line">    <span class="keyword">if</span> (fd&gt;=NR_OPEN)</span><br><span class="line">        <span class="keyword">return</span> -EINVAL;</span><br><span class="line">        </span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * close_on_exec，服务于execve函数，当使用execve时，会检查当前进程的close_on_exec位图，将对应位置为1的文件句柄做关闭处理</span></span><br><span class="line"><span class="comment">     * 在使用fork创建子进程时，我们希望保留原有文件句柄，所以默认情况下会把close_on_exec位图对应的位复位，当确实需要在execve后删除句柄，就自己去置位就可以了。</span></span><br><span class="line"><span class="comment">     * </span></span><br><span class="line"><span class="comment">     * </span></span><br><span class="line"><span class="comment">     **/</span></span><br><span class="line">    current-&gt;close_on_exec &amp;= ~(<span class="number">1</span>&lt;&lt;fd);</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * file_table定义：struct file file_table[NR_FILE]，即存放file的数组，最终进程-&gt;filp[fd]会指向file_table的空闲项</span></span><br><span class="line"><span class="comment">     **/</span></span><br><span class="line">    f=<span class="number">0</span>+file_table;</span><br><span class="line">	<span class="keyword">for</span> (i=<span class="number">0</span> ; i&lt;NR_FILE ; i++,f++)</span><br><span class="line">		<span class="keyword">if</span> (!f-&gt;f_count) <span class="keyword">break</span>;</span><br><span class="line">	<span class="keyword">if</span> (i&gt;=NR_FILE)</span><br><span class="line">		<span class="keyword">return</span> -EINVAL;</span><br><span class="line">	(current-&gt;filp[fd]=f)-&gt;f_count++;</span><br><span class="line"></span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * </span></span><br><span class="line"><span class="comment">     * 重点放到open_namei</span></span><br><span class="line"><span class="comment">     * int open_namei(const char * pathname, int flag, int mode, struct m_inode ** res_inode)</span></span><br><span class="line"><span class="comment">     * 返回值是一个状态码，表达本次函数操作是否失败，小于0即失败，等于0即成功</span></span><br><span class="line"><span class="comment">     * 成功后获得的信息存放在res_inode中</span></span><br><span class="line"><span class="comment">     * m_inode：i节点，保存着当前文件的各种信息，同时也有与块设备存放数据对应块的索引</span></span><br><span class="line"><span class="comment">     * </span></span><br><span class="line"><span class="comment">     * 接下来我们跳转到open_namei去看</span></span><br><span class="line"><span class="comment">     * </span></span><br><span class="line"><span class="comment">     **/</span></span><br><span class="line">    <span class="keyword">if</span> ((i=open_namei(filename,flag,mode,&amp;inode))&lt;<span class="number">0</span>) &#123;</span><br><span class="line">		current-&gt;filp[fd]=<span class="literal">NULL</span>;</span><br><span class="line">		f-&gt;f_count=<span class="number">0</span>;</span><br><span class="line">		<span class="keyword">return</span> i;</span><br><span class="line">	&#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><figcaption><span>fs/namei.c</span></figcaption><table><tr><td class="code"><pre><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">open_namei</span><span class="params">(<span class="type">const</span> <span class="type">char</span> * pathname, <span class="type">int</span> flag, <span class="type">int</span> mode, <span class="keyword">struct</span> m_inode ** res_inode)</span> &#123;</span><br><span class="line">        <span class="comment">//...</span></span><br><span class="line">        <span class="comment">// 通过dir_namei获取了什么呢</span></span><br><span class="line">        <span class="comment">// 举个例子：比如pathname：/home/litao/todo.txt，那么返回的basename即为todo.txt</span></span><br><span class="line">        <span class="keyword">if</span> (!(dir = dir_namei(pathname,&amp;namelen,&amp;basename)))</span><br><span class="line">        <span class="keyword">return</span> -ENOENT;</span><br><span class="line">    &#125;</span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><figcaption><span>dir_namei</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="type">static</span> <span class="keyword">struct</span> m_inode * <span class="title function_">dir_namei</span><span class="params">(<span class="type">const</span> <span class="type">char</span> * pathname,</span></span><br><span class="line"><span class="params">    <span class="type">int</span> * namelen, <span class="type">const</span> <span class="type">char</span> ** name)</span></span><br><span class="line">&#123;</span><br><span class="line">    <span class="type">char</span> c;</span><br><span class="line">    <span class="type">const</span> <span class="type">char</span> * basename;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">m_inode</span> * <span class="title">dir</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (!(dir = get_dir(pathname)))</span><br><span class="line">        <span class="keyword">return</span> <span class="literal">NULL</span>;</span><br><span class="line">    basename = pathname;</span><br><span class="line">    <span class="keyword">while</span> ((c=get_fs_byte(pathname++)))</span><br><span class="line">        <span class="keyword">if</span> (c==<span class="string">&#x27;/&#x27;</span>)</span><br><span class="line">            basename=pathname;</span><br><span class="line">    *namelen = pathname-basename<span class="number">-1</span>;</span><br><span class="line">    *name = basename;</span><br><span class="line">    <span class="keyword">return</span> dir;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+<p>重点转移到了get_dir</p>
+]]></content>
+  </entry>
+  <entry>
+    <title>计算机网络：应用层（自顶向下学习笔记）</title>
+    <url>/2022/10/29/networking-application-layer/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><h2 id="为什么要有应用层"><a href="#为什么要有应用层" class="headerlink" title="为什么要有应用层"></a>为什么要有应用层</h2><p>想想为什么要有系统调用，针对用户程序来说，系统调用可以让其使用计算机提供的各种接口，来实现其功能。<br>对应的，针对应用层来说，应用层可以使用调用下一层（传输层）提供的能力来完成网络能力，传输层为应用层提供了网络接口，帮助其实现网络应用。</p>
+<h3 id="网络应用程序体系结构"><a href="#网络应用程序体系结构" class="headerlink" title="网络应用程序体系结构"></a>网络应用程序体系结构</h3><p>体系结构是有应用程序的研发者设计的，至于怎么设计都是限制在应用层上的，设计可以根据你所需要的业务场景决定，但大部分场景也就一种<code>客户端-服务端体系结构</code>，针对部分应用有<code>对等网络结构（P2P）</code>。</p>
+<ul>
+<li><p>客户端-服务端体系结构，当你打开一个浏览器，或者用手机打开抖音，其都是在使用这种结构，你通过一个浏览器进程或者APP进程访问一个固定的IP地址，从对应的进程中获取数据并返回到你的屏幕上。所以这种结构需要一个处理各种业务数据的服务端，这个服务端要对来及各地的客户端的请求都要做处理，因此这种结构下服务器的成本很大。</p>
+</li>
+<li><p>P2P体系结构，对等网络体系，也就是你既是客户端又是服务端，你相当于一个节点，在P2P网络体系中有很多节点，你负责提供一部分资源，同时你也可以从其他节点获取你想要的资源，这就是P2P结构，他很少或者完全没有依赖中心服务器，在流量密集型场景就非常适用P2P结构，例如网络电话，视频通信，种子下载等。同时，也因为P2P应用的非高度集中式应用，也面临安全性、性能、可靠性等诸多挑战，毕竟有得必有失嘛。</p>
+</li>
+</ul>
+<h3 id="进程通信"><a href="#进程通信" class="headerlink" title="进程通信"></a>进程通信</h3><p>其实就是作为研发怎么去使用计算机网络，给你一个客户端与一个服务端，怎么能让他俩通信起来，很简单</p>
+<ul>
+<li>构建一个客户端进程，你可以在任意电脑或手机上构建</li>
+<li>构建一个服务端进程，通常服务端的IP是固定的，保证客户端能稳定的请求到你。</li>
+<li>服务器进程绑定到一个端口上，从该等待到来的数据</li>
+<li>客户端使用socket将数据传输到服务器的socket上，socket在根据报文中的端口号将报文分配给对应的进程</li>
+<li>socket是什么，可以简单理解为网卡与计算机应用中间那一层，为计算机提供网络接口，将网卡中接收到的数据分配给对应的客户端进程。</li>
+<li>socket位于应用层。</li>
+</ul>
+<h3 id="两种运输服务"><a href="#两种运输服务" class="headerlink" title="两种运输服务"></a>两种运输服务</h3><p>使用socket时，你可以决定使用什么样的运输服务，也即TCP还是UDP，两种方式各有千秋。</p>
+<p>TCP保证了可靠的数据传输服务。</p>
+<p>对应的，UDP就是非可靠数据传输服务了。</p>
+<h2 id="应用层协议"><a href="#应用层协议" class="headerlink" title="应用层协议"></a>应用层协议</h2><p>就是由应用研发者设计的几套报文标准，我们最关注的就是HTTP协议，后面也会继续深究，这里先放过。</p>
+<h3 id="HTTP"><a href="#HTTP" class="headerlink" title="HTTP"></a>HTTP</h3><h3 id="SMTP"><a href="#SMTP" class="headerlink" title="SMTP"></a>SMTP</h3><h3 id="POP3"><a href="#POP3" class="headerlink" title="POP3"></a>POP3</h3><h2 id="DNS"><a href="#DNS" class="headerlink" title="DNS"></a>DNS</h2><p>DNS就有趣了</p>
+<p>他只提供一个能力：域名到IP的映射，很重要的一项能力。</p>
+<p>也位于应用层。</p>
+<p>看下面两篇文章，绝对懂了。</p>
+<ul>
+<li><a href="https://www.ruanyifeng.com/blog/2016/06/dns.html">DNS原理入门</a></li>
+<li><a href="https://www.ruanyifeng.com/blog/2022/08/dns-query.html">DNS原理详解</a></li>
+</ul>
+]]></content>
+      <tags>
+        <tag>计算机网络</tag>
+        <tag>应用层</tag>
+        <tag>DNS解析</tag>
       </tags>
   </entry>
   <entry>
@@ -520,6 +799,317 @@
       <tags>
         <tag>操作系统</tag>
         <tag>存储器</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>计算机网络 传输层</title>
+    <url>/2022/10/29/networking-transport-layer/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>传输层就关注两个TCP和UDP。<br>除此之外我们再关注下多路复用与多路分解。<br>在对UDP和TCP介绍之前，我们先简要介绍下网络层，网络层协议即IP，IP的服务模型即尽力而为去交付，尽力而为是委婉的说法，直接点说就是网络层是不靠谱的，传输中数据可能丢失、被更改、等等，即IP是不可靠的服务协议。TCP和UDP是建立在IP之上实现的。TCP和UDP的主要职责就是将两个IP之间的数据传输转换到两个进程之间的数据传输，并以此引出多路复用与多路分解。</p>
+<h2 id="多路复用与多路分解"><a href="#多路复用与多路分解" class="headerlink" title="多路复用与多路分解"></a>多路复用与多路分解</h2><p>什么是多路复用与多路分解呢，就是将网络层两个IP之间的数据传输转换到两个端进程的数据传输。</p>
+<p>多路复用其实就是把各端口（进程绑定端口）的数据用端口号包装了下，扔到了网络层。<br>到了目的传输层后，通过拆解端口的包装来决定分配给哪个socket，这也就是多路分解。<br>TCP与UDP在多路复用上差不多，在多路分解上会有些差别。<br>UDP多路分解时仅看目的端口号，这意味着不同源向相同的IP：端口发送，那么将被同一个套接字接收。<br>而对于tcp而言，他需要源IP：源端口号以及目的IP：目的端口号才能确定要将数据发送给哪个套接字。</p>
+<p>以上也是粗略理解，会随着一点点学习来更新以上说法。</p>
+<h2 id="UDP"><a href="#UDP" class="headerlink" title="UDP"></a>UDP</h2><p>无连接、不可靠的传输协议。</p>
+<p>【RFC768】定义UDP仅需要提供传输协议最基本的要求就可以了，所以UDP仅提供了多路分解/多路复用这必要的能力以及基本的差错检测能力。<br>DNS便使用UDP来请求DNS服务器。</p>
+<p>相比TCP，UDP具有更加自由的优势，你可以自己在应用层通过封装UDP来自定义一个可靠传输的协议，从而去除一些不想要的TCP特性，比如拥塞控制等等。</p>
+<h3 id="UDP报文段结构"><a href="#UDP报文段结构" class="headerlink" title="UDP报文段结构"></a>UDP报文段结构</h3><p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/networking/clipboard_20221029_021100.png" alt="UDP报文段结构"></p>
+<p>可以看到，UDP的报文段内容是很简单的，首部仅有8个字节，其余就是要传输的数据内容了。</p>
+<h3 id="UDP检验和"><a href="#UDP检验和" class="headerlink" title="UDP检验和"></a>UDP检验和</h3><p>这里不做详细介绍，传输前UDP对自身报文段进行各种反码补码位数加减操作得到了检验和，然后到达目的地在利用检验和做完成性校验，就完事了。当出现差错时，该报文段就会被丢弃，并提醒应用层：“有个坏了的报文段被我丢弃了，你注意点。”</p>
+<h2 id="TCP"><a href="#TCP" class="headerlink" title="TCP"></a>TCP</h2><p>有连接、可靠的传输协议。</p>
+<p>在不可靠的IP协议上，建立一个可靠的传输协议，TCP应该怎么做呢，这时我们要思以及学习的重点内容。</p>
+]]></content>
+  </entry>
+  <entry>
+    <title>Risc-V的三种模式</title>
+    <url>/2022/11/03/risc-v%E7%9A%84%E4%B8%89%E7%A7%8D%E6%A8%A1%E5%BC%8F/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><h2 id="机器模式（machine-mode）"><a href="#机器模式（machine-mode）" class="headerlink" title="机器模式（machine-mode）"></a>机器模式（machine-mode）</h2><p>机器模式（缩写为 M 模式，M-mode）是 RISC-V 中 hart（hardware thread，硬件线程）可以执行的最高权限模式。在 M 模式下运行的 hart 对内存，I/O 和一些对于启动和配置系统来说必要的底层功能有着完全的使用权。</p>
+<p>机器模式可以拦截并处理异常，异常被分为两类。一类是同步异常，指执行了无效操作码的指令，或者访问了无效的内存地址。另一类即是中断（软件中断硬件中断）。</p>
+<h3 id="机器模式下的异常处理"><a href="#机器模式下的异常处理" class="headerlink" title="机器模式下的异常处理"></a>机器模式下的异常处理</h3><p>八个控制状态寄存器（CSR）是机器模式下异常处理的必要部分：</p>
+<ul>
+<li><code>mtvec（Machine Trap Vector）</code>它保存发生异常时处理器需要跳转到的地址。</li>
+<li><code>mepc（Machine Exception PC）</code>它指向发生异常的指令。</li>
+<li><code>mcause（Machine Exception Cause）</code>它指示发生异常的种类。</li>
+<li><code>mie（Machine Interrupt Enable）</code>它指出目前哪些中断可以被处理。</li>
+<li><code>mip（Machine Interrupt Pending）</code>保存目前待处理的中断。</li>
+<li><code>mtval（Machine Trap Value）</code>它保存了陷入（trap）的附加信息：地址例外中出错的地址、发生非法指令例外的指令本身，对于其他异常，它的值为 0。</li>
+<li><code>mscratch（Machine Scratch）</code>它暂时存放一个字大小的数据。</li>
+<li><code>mstatus（Machine Status）</code>它保存全局中断开关，以及许多其他的状态，其中包括当前以哪种模式运行</li>
+</ul>
+<p>处理器在 M 模式下运行时，只有在全局中断开关 <code>mstatus.MIE=1</code>时才会产生中断.此外，每种类型中断在CSR<code>mie</code>中都有自己的开关。举个例子，xv6在最开始运行时，会在start.c中完成对时钟中断器的初始化。</p>
+<figure class="highlight c"><figcaption><span>xv6/kernel/start.c->timerinit()</span></figcaption><table><tr><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * 1. 将mstatus.MIE = 1， 打开了M模式的全局中断开关</span></span><br><span class="line"><span class="comment"> * 2. 将mie.MTIE = 1，   允许了M模式发生时钟中断异常</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="type">void</span> <span class="title function_">timerinit</span><span class="params">()</span> &#123;</span><br><span class="line">  </span><br><span class="line">  <span class="comment">// each CPU has a separate source of timer interrupts.</span></span><br><span class="line">  <span class="type">int</span> id = r_mhartid();</span><br><span class="line"></span><br><span class="line">  <span class="comment">// ask the CLINT for a timer interrupt.</span></span><br><span class="line">  <span class="type">int</span> interval = <span class="number">1000000</span>; <span class="comment">// cycles; about 1/10th second in qemu.</span></span><br><span class="line">  *(uint64*)CLINT_MTIMECMP(id) = *(uint64*)CLINT_MTIME + interval;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// prepare information in scratch[] for timervec.</span></span><br><span class="line">  <span class="comment">// scratch[0..3] : space for timervec to save registers.</span></span><br><span class="line">  <span class="comment">// scratch[4] : address of CLINT MTIMECMP register.</span></span><br><span class="line">  <span class="comment">// scratch[5] : desired interval (in cycles) between timer interrupts.</span></span><br><span class="line">  <span class="comment">// 为时钟中断的中断处理函数timervec, 提供一些配置信息</span></span><br><span class="line">  uint64 *scratch = &amp;mscratch0[<span class="number">32</span> * id];</span><br><span class="line">  scratch[<span class="number">4</span>] = CLINT_MTIMECMP(id);</span><br><span class="line">  scratch[<span class="number">5</span>] = interval;</span><br><span class="line">  w_mscratch((uint64)scratch);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// set the machine-mode trap handler.</span></span><br><span class="line">  <span class="comment">// 机器模式下，发生中断时跳转的中断处理函数，在M模式下，仅处理时钟中断异常，所以入口直接设置成了时钟中断处理函数的地址。</span></span><br><span class="line">  w_mtvec((uint64)timervec);</span><br><span class="line">  <span class="comment">// IE-&gt;interrupt execption-&gt;中断异常</span></span><br><span class="line">  <span class="comment">// enable machine-mode interrupts.</span></span><br><span class="line">  w_mstatus(r_mstatus() | MSTATUS_MIE);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// enable machine-mode timer interrupts.</span></span><br><span class="line">  w_mie(r_mie() | MIE_MTIE);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>如果<code>timerinit()</code>初始化完成后，发生了时钟中断，那么此时寄存器<code>mip</code>的<code>MTIE</code>会置为1，那么此时就会发生中断。</p>
+<div class="note info">
+            <p>中断什么时候发生？当CPU执行一条指令前，他会去检查一下对应的中断寄存器，对应时钟中断，当检查到mip.MTIE = 1，即此时有一条时钟中断，且对应的mstatus.mie = 1 &amp;&amp; mie.MTIE = 1，那么此时就会发生时钟中断。</p>
+          </div>
+
+<p>在机器模式下，当CPU发生发生异常时，硬件会自动做出以下动作：</p>
+<ol>
+<li>发生异常指令的PC保存到CSR<code>mepc</code>中，并将PC设置为CSR<code>mtvec</code>的值</li>
+<li>根据异常来源设置CSR<code>mcause</code>，将mtval设置为设置为出错的地址或者其他特定的异常信息。</li>
+<li>将<code>mstatus.MIE</code>置为0，禁用全局中断，并将<code>mstatus.MIE</code>的值保存到<code>mstatus.MPIE</code>中</li>
+<li>将异常前的运行模式保存到<code>mstatus.MPP</code>中，并将运行模式切换到M模式。</li>
+</ol>
+<p>此时跳转到mtvec保存的地址中去执行，当返回时，需要依赖<code>mret</code>指令，执行mret执行将会执行上述步骤的逆操作，返回到原先发生异常的状态。</p>
+<h2 id="用户模式-（user-mode）"><a href="#用户模式-（user-mode）" class="headerlink" title="用户模式 （user-mode）"></a>用户模式 （user-mode）</h2><p>对于简单的嵌入式系统来说，机器模式就够了，而对于操作系统来说，上面运行这很多用户程序，需要保证用户程序间的内存相互隔离，以保证安全性，同时要禁止用户程序使用一些机器特权指令，例如mret等等。防止用户程序越界。</p>
+<p>用户代码必须被限制只能访问自己那部分内存。实现了 M 和 U 模式的处理器具有一个叫做物理内存保护（PMP，Physical Memory Protection）的功能，允许 M 模式指定 U 模式可以访问的内存地址。PMP 包括几个地址寄存器（通常为 8 到 16 个）和相应的配置寄存器。这些配置寄存器可以授予或拒绝读、写和执行权限。当处于 U 模式的处理器尝试取指或执行 load 或 store 操作时，将地址和所有的 PMP 地址寄存器比较。如果地址大于等于 PMP 地址 i，但小于 PMP 地址 i+1，则 PMP i+1 的配置寄存器决定该访问是否可以继续，如果不能将会引发访问异常。</p>
+<h2 id="管理模式（supervisor-mode）"><a href="#管理模式（supervisor-mode）" class="headerlink" title="管理模式（supervisor-mode）"></a>管理模式（supervisor-mode）</h2><p>上一节中描述的 PMP 方案对嵌入式系统的实现很有吸引力，因为它以相对较低的成本提供了内存保护，但它的一些缺点限制了它在通用计算中的使用。由于 PMP 仅支持固定数量的内存区域，因此无法对它进行扩展从而适应复杂的应用程序。而且由于这些区域必须在物理存储中连续，因此系统可能产生存储碎片化的问题。另外，PMP 不能有效地支持对辅存的分页。</p>
+<p>更复杂的 RISC-V 处理器用和几乎所有通用架构相同的方式处理这些问题：使用基于页面的虚拟内存。这个功能构成了监管者模式（S 模式）的核心，这是一种可选的权限模式，旨在支持现代类 Unix 操作系统，如 Linux，FreeBSD 和 Windows。S 模式比 U 模式权<br>限更高，但比 M 模式低。与 U 模式一样，S 模式下运行的软件不能使用 M 模式的 CSR 和指令，并且受到 PMP 的限制。本届介绍 S 模式的中断和异常，下一节将详细介绍 S 模式下的虚拟内存系统。</p>
+<p>默认情况下，发生所有异常（不论在什么权限模式下）的时候，控制权都会被移交到M 模式的异常处理程序。但是 Unix 系统中的大多数例外都应该进行 S 模式下的系统调用。M 模式的异常处理程序可以将异常重新导向 S 模式，但这些额外的操作会减慢大多数<br>异常的处理速度。因此，RISC-V 提供了一种异常委托机制。通过该机制可以选择性地将中断和同步异常交给 S 模式处理，而完全绕过 M 模式。</p>
+<p>mideleg（Machine Interrupt Delegation，机器中断委托）CSR 控制将哪些中断委托给 S模式。例如，mideleg[5]对应于 S 模式的时钟中断，如果把它置位，S 模式的时钟中断将会移交 S 模式的异常处理程序，而不是 M 模式的异常处理程序。</p>
+<p><code>sie</code>和<code>sip</code>在S模式下的作用等同于<code>mie</code>和<code>mip</code>在M模式下的作用。</p>
+<p>同样的，处理中断委托外，还有同步异常委托CSR medeleg（Machine Execption Delegation）。</p>
+<p>请注意，无论委派设置是怎样的，发生异常时控制权都不会移交给权限更低的模式。在 M 模式下发生的异常总是在 M 模式下处理。在 S 模式下发生的异常，根据具体的委派设置，可能由 M 模式或 S 模式处理，但永远不会由 U 模式处理。</p>
+<p>S 模式有几个异常处理 CSR：sepc、stvec、scause、sscratch、stval 和 sstatus，它们 M 模式 CSR 相同的功能。监管者异常返回指令 sret 与 mret 的行为相同，但它作用于 S 模式的异常处理 CSR，而不是 M 模式的 CSR。</p>
+<p>在管理模式下，当CPU发生发生异常时，硬件会自动做出以下动作：</p>
+<ol>
+<li>发生异常指令的PC保存到CSR<code>sepc</code>中，并将PC设置为CSR<code>stvec</code>的值</li>
+<li>根据异常来源设置CSR<code>scause</code>，将mtval设置为设置为出错的地址或者其他特定的异常信息。</li>
+<li>将<code>mstatus.SIE</code>置为0，禁用全局中断，并将<code>mstatus.SIE</code>的值保存到<code>mstatus.SPIE</code>中</li>
+<li>将异常前的运行模式保存到<code>mstatus.SPP</code>中，并将运行模式切换到S模式。</li>
+</ol>
+]]></content>
+      <tags>
+        <tag>risc-v</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>虚拟内存学习笔记</title>
+    <url>/2022/02/01/v-memory/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><h2 id="虚拟内存是什么？"><a href="#虚拟内存是什么？" class="headerlink" title="虚拟内存是什么？"></a>虚拟内存是什么？</h2><p>虚拟内存是计算机系统内存管理的一种技术。它是的应用程序认为它拥有连续可用的内存，而实际在物理内存层面，可能是不连续的内存碎片，虚拟内存使用映射的方式将物理内存碎片映射起来，使其看起来是连续的内存。</p>
+<h2 id="虚拟地址和物理地址之间怎么映射的？"><a href="#虚拟地址和物理地址之间怎么映射的？" class="headerlink" title="虚拟地址和物理地址之间怎么映射的？"></a>虚拟地址和物理地址之间怎么映射的？</h2><h3 id="内存分段"><a href="#内存分段" class="headerlink" title="内存分段"></a>内存分段</h3><p>内存分段是较早提出的一种分段方式，分段方法也简单，就是段到段的映射。当需要一块大小为n的虚拟内存时，此时就直接在物理内存中寻找一块连续的物理内存使用就好了。</p>
+<p>内存分段解决了程序本身不需要关系局的物理内存地址的问题，但也存在以下问题：</p>
+<ul>
+<li>内存碎片严重。</li>
+<li>内存交换的效率低。</li>
+</ul>
+<p>当你不断的申请释放申请释放内存时，就会产生很多不连续的小物理碎片，造成空间浪费。如何解决这个问题呢？就需要把不连续的内存空间重新连续起来，那么就要把内存整理成连续的，就需要利用硬盘来进行swap，把数据写回到硬盘再装载回内存，通过这种方式来将不连续的物理空间整理成连续的，而与硬盘的IO操作必然效率低下。</p>
+<p>为了解决碎片问题与内存交换的效率问题，就出现了内存分页。</p>
+<h3 id="内存分页（Paging）"><a href="#内存分页（Paging）" class="headerlink" title="内存分页（Paging）"></a>内存分页（Paging）</h3><p>分页就是把整个虚拟和物理内存空间切成一段段固定的尺寸大小，我们将切出来的这一段段空间称之为页。</p>
+<blockquote>
+<p>在Linux下，每一页的大小为<code>4KB</code></p>
+</blockquote>
+<p>虚拟地址与物理地址之间使用<strong>页表</strong>来映射。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/%E5%86%85%E5%AD%98%E5%88%86%E9%A1%B5.png" alt="内存分页"></p>
+<p>页表是存储在内存里的，内存管理单元（MMU）就做将虚拟内存地址转换成物理地址的工作。</p>
+<p>而当进程访问的虚拟地址在页表中查不到时，系统就会产生一个<strong>缺页异常</strong>，进入系统内核空间分配物理内存、更新进程页表，最后再返回用户空间，恢复进程的运行。</p>
+<ul>
+<li>由于使用的内存空间都是预先划分成页的，一页页使用，就不会产生内存间隙。</li>
+<li>内存交换效率低下问题也被解决掉了，如果遇到内存不足的情况，操作系统就会把其他正在运行的进程中最近不适用的内存页给释放掉，并暂时缓存到硬盘中，由于仅仅缓存一个或几个页面，就不会花很多时间，内存交换的效率自然就被提高了。</li>
+<li>更进一步的，在加载程序时，我们也不需要直接把所有程序都加载到物理内存中。只有当使用到所需要的数据时，再用预先创建好的映射关系去物理内存找，物理内存此时才会从硬盘里加载数据。（直接实现了数据的按需加载。）</li>
+</ul>
+<h4 id="多级页表"><a href="#多级页表" class="headerlink" title="多级页表"></a>多级页表</h4><p>前面我们聊到了页表，用来负责虚拟内存到物理内存的映射。这部分映射关系保存在内存中，在32位环境中，虚拟地址空间共有4GB，如果一个页的大小是4KB的话，那么可以分出大约100万个页，每个<em>页表项</em>需要4个字节来保存，那么4GB空间则需要4MB，每个进程都拥有自己的虚拟内存地址，当进程很多时，对内存的占用就很大了。</p>
+<p>为了解决上述映射问题，就出现了多级页表的解决方案。</p>
+<blockquote>
+<p>局部性原理：指CPU访问存储器时，无论是存取指令还是存取数据，所访问的存储单元都趋于聚集在一个较小的连续区域中。</p>
+</blockquote>
+<p>通常为一个进程分配的4GB的虚拟内存都是用不完的，那么，那么能否做到按需加载呢？那么多级页面便可利用局部性原理做到按需加载。</p>
+<p>一级页表覆盖所有虚拟地址（先粗粒度的划分），一级页表下有1024个二级页表，二级页表下有1024个页表项，当进程需要访问某个页时，若该页表没有分配，此时再将其分配出来，其他的页表等需要的时候再分配，以此减少内存。</p>
+<p>多级页表减少了页表对内存的占用，但同时也降低访问速度，以空间换时间，那么有没有一种做法，可以把牺牲的时间再换回来呢？答案依旧是利用局部性原理做缓存，对常用的页表项缓存。</p>
+<h3 id="TLB"><a href="#TLB" class="headerlink" title="TLB"></a>TLB</h3><p>TLB：Translation Lookaside Buffer，利用局部性原理，把最常访问的几个页表项存储到访问速度更快的硬件中，这个硬件在CPU中，用来对页表项做Cache，这个Cache即TLB。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/TLB.png" alt="TLB"></p>
+<p>CPU请求MMU，MMU再查询TLB是否有缓存命中，没找到则查询常规页表。</p>
+<h4 id="MMU是啥"><a href="#MMU是啥" class="headerlink" title="MMU是啥"></a>MMU是啥</h4><p>MMU：memory management unit</p>
+<p>MMU是CPU的一部分，每个CPU核心都有一个MMU，包含：</p>
+<ul>
+<li>TLB：页表项高速缓存。</li>
+<li>Table Walk Unit：负责从页表中读取虚拟地址对应的物理地址。</li>
+</ul>
+<h2 id="更进一步，分析Linux-011的虚拟内存管理源码"><a href="#更进一步，分析Linux-011的虚拟内存管理源码" class="headerlink" title="更进一步，分析Linux.011的虚拟内存管理源码"></a>更进一步，分析Linux.011的虚拟内存管理源码</h2><div class="note warning">
+            <p>请注意：我们下面会明确的区分<strong>虚拟地址(线性地址)<strong>与</strong>物理地址</strong>，请注意表述。</p>
+          </div>
+
+<p>接下来我们以Linux0.11为例，看下当时Linux中，是怎么对内存进行管理的，Linux0.11的内存管理有三个文件</p>
+<ul>
+<li><code>page.s</code>文件较短，仅包含内存页异常的中断处理<code>int 14</code>，主要实现了缺点和页写保护的处理。</li>
+<li><code>memory.c</code>是内存管理的核心文件，用于内存的初始化过程、页目录和页表的管理和内核其他部分对内存的申请处理过程。</li>
+<li><code>Makefile</code>不做介绍</li>
+</ul>
+<h3 id="Linux0-11多页页表结构"><a href="#Linux0-11多页页表结构" class="headerlink" title="Linux0.11多页页表结构"></a>Linux0.11多页页表结构</h3><p>Linux0.11采用页目录表-&gt;页表-&gt;页表项的页表结构，每个页表的寻址范围为4MB。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/v-memory/clipboard_20220722_083310.png" alt="页目录表和页表结构示意图"></p>
+<p>为了使用内存分页机制，一个32位的线性地址被分成了三个部分分别用来指定页目录表项、页表项、物理内存页的偏移地址。</p>
+<p>页目录表的基地址被存放在CR3寄存器中，一个系统可以存在多个页目录表，而某个时刻仅有一个页目录表可使用，对于Linux0.11，仅有一个页目录表，在head.s中初始化，放置在物理内存0处。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/v-memory/clipboard_20220722_083402.png" alt="线性地址变换示意图"></p>
+<p>每个表项由页框地址、访问标志位、脏标志位、存在标志位等构成。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/v-memory/clipboard_20220722_085239.png" alt="表项结构"></p>
+<h3 id="Linux0-11物理内存的分配和管理"><a href="#Linux0-11物理内存的分配和管理" class="headerlink" title="Linux0.11物理内存的分配和管理"></a>Linux0.11物理内存的分配和管理</h3><p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/v-memory/clipboard_20220722_085537.png" alt="物理内存示意图"></p>
+<h3 id="Linux0-11对线性空间的使用与分配"><a href="#Linux0-11对线性空间的使用与分配" class="headerlink" title="Linux0.11对线性空间的使用与分配"></a>Linux0.11对线性空间的使用与分配</h3><p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/v-memory/clipboard_20220722_085745.png" alt="Linux0.11对线性空间的使用与分配"></p>
+<h3 id="memeory-c"><a href="#memeory-c" class="headerlink" title="memeory.c"></a>memeory.c</h3><p>本程序可以进行内存分页的管理，实现了对主内存区的动态分配和回收操作。</p>
+<p>更多资料：</p>
+<ul>
+<li><a href="https://www.geeksforgeeks.org/whats-difference-between-cpu-cache-and-tlb/">cpu cache和TLB的区别</a></li>
+<li><a href="https://mp.weixin.qq.com/s?__biz=Mzg5ODUxNDMxMA==&mid=2247487483&idx=1&sn=13aa90d49cb71d02b364856cc82e0147&chksm=c0602312f717aa04cc469a3f7b70de02b5de9bba0fa9a5438c478e89cc358e6166a0bc92b902&token=1104839902&lang=zh_CN#rd">MMU的工作过程</a></li>
+</ul>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>虚拟内存</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>Xv6实验二学习笔记</title>
+    <url>/2022/10/28/xv6-lab-2-note/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>当RISC-V计算机上电时，它会初始化自己并运行一个存储在只读内存中的引导加载程序。引导加载程序将xv6内核加载到内存中。然后，在机器模式下，中央处理器从_entry (kernel/entry.S:6)开始运行xv6。</p>
+<h2 id="entry-S-入口"><a href="#entry-S-入口" class="headerlink" title="_entry.S 入口"></a>_entry.S 入口</h2><p>简述：完成多核cpu栈的分配并跳转到<code>kernel/start.c</code>执行<code>start</code>函数</p>
+<figure class="highlight text"><figcaption><span>entry.S</span></figcaption><table><tr><td class="code"><pre><span class="line">    # qemu -kernel loads the kernel at 0x80000000</span><br><span class="line">        # and causes each CPU to jump there.</span><br><span class="line">        # kernel.ld causes the following code to</span><br><span class="line">        # be placed at 0x80000000.</span><br><span class="line">.section .text</span><br><span class="line">_entry:</span><br><span class="line">    # set up a stack for C.</span><br><span class="line">        # stack0 is declared in start.c,</span><br><span class="line">        # with a 4096-byte stack per CPU.</span><br><span class="line">        # sp = stack0 + (hartid * 4096)</span><br><span class="line">        la sp, stack0</span><br><span class="line">        li a0, 1024*4</span><br><span class="line">    csrr a1, mhartid</span><br><span class="line">        addi a1, a1, 1</span><br><span class="line">        mul a0, a0, a1</span><br><span class="line">        add sp, sp, a0</span><br><span class="line">    # jump to start() in start.c</span><br><span class="line">        call start</span><br><span class="line">spin:</span><br><span class="line">        j spin</span><br></pre></td></tr></table></figure>
+
+<p>qemu -kernel 将内核加载到地址0x80000000处，并让每个CPU跳转到这里来执行。<br>kernel.ld 会将上述代码加载到0x800000000处，以供CPU跳转执行。（是否可以认为这里是入口）<br>我们将一行行解释这里的指令</p>
+<p><code>la sp, stack0</code>，stack0被定义在start.c中：<code>char stack0[4096 * NCPU]</code>，<code>la</code>可以理解成load address指令，这里即是将stack0的地址加载到sp寄存器上（<em>问题1：sp寄存器一般不是指向栈顶吗，这里的栈顶怎么成了stack0[0]了</em>）。<br><code>li a0, 1024*4</code>，<code>li</code>可以理解成load imm（立即数）指令，即是将1024<em>4加载到a0寄存器，（</em>说实话我没看到li la指令的区别，实际上是有的，还有比较大的区别，我们不细究，知道怎么使用就好，一个是地址，一个是立即数*）。<br><code>csrr a1, mhartid</code>，<code>csrr</code>我们要详细介绍下：有兴趣可以看下<a href="https://juejin.cn/post/6891962672892837901">这篇文章</a>，下面我们摘取介绍下CSR</p>
+<ul>
+<li><p>CSR 是支撑 RISC-V 特权指令集的一个重要概念。CSR 的全称为 控制与状态寄存器（control and status registers）。</p>
+</li>
+<li><p>简单来说，CSR 是 CPU 中的一系列特殊的寄存器，这些寄存器能够反映和控制 CPU 当前的状态和执行机制。在 RISC-V 特权指令集手册 中定义的一些典型的 CSR 如下：</p>
+<ul>
+<li>misa，反映 CPU 对于 RISC-V 指令集的支持情况，如 CPU 所支持的最长的位数（32 / 64 / 128）和 CPU 所支持的 RISC-V 扩展。</li>
+<li>mstatus，包含很多与 CPU 执行机制有关的状态位，如 MIE 是否开启 M-mode 中断等。</li>
+<li>mhartid，简单理解为当前cpu的id</li>
+</ul>
+</li>
+<li><p>操作CSR寄存器的有以下几种指令（其中包括伪指令）</p>
+<ul>
+<li><code>csrr</code>，读取一个CSR寄存器值到通用寄存器。如：<code>csrr t0, mstatus</code>，读取<code>mstatus</code>的值到<code>t0</code>中。</li>
+<li><code>csrw</code>，将通用寄存器的值写入到CSR寄存器。如：<code>csrw mstatus, t0</code>, 将<code>t0</code>写入到<code>mstatus</code>中。</li>
+<li><code>csrs</code>，把<code>CSR</code>中指定的bit置1。如：<code>csrsi mstatus, (1 &lt;&lt; 2)</code>，将<code>mstatus</code>的右起第3位置1。</li>
+<li><code>csrc</code>，把<code>CSR</code>中指定的bit置0。</li>
+<li><code>csrrw</code>，读取一个<code>CSR</code>的值到通用寄存器，然后把另一个值写入该<code>CSR</code>。如：<code>csrrw t0, mstatus, t0</code>，将<code>mstatus</code>的值与<code>t0</code>的值交换</li>
+<li><code>csrrs</code>，读取一个<code>CSR</code>的值到通用寄存器，然后把该<code>CSR</code>中指定的<code>bit</code>置1。</li>
+<li><code>csrrc</code>, 读取一个<code>CSR</code>的值到通用寄存器，然后把该<code>CSR</code>中指定的<code>bit</code>置0。</li>
+</ul>
+</li>
+</ul>
+<p>那么对于本行指令，就是将mhartid寄存器的值读取至a1中。<br><code>addi a1, a1, 1</code>， a1 = a1 + 1<br><code>mul a0, a0, a1</code>， <code>a0 = a0 * a1</code>，即 a0 = <code>1024*4*a1</code>，这里我理解cpuid是从0开始递增的，所以对于cpu0来说，那么a0就等于1024*4<br><code>add sp, sp, a0</code>，sp = sp + a0。</p>
+<p>经过上述操作每个cpu分配到了一块栈，栈顶为stack0 + mhartid，大小为4096。</p>
+<p>分配完栈后，便调用start(<strong>kernel/start.c</strong>:21)。</p>
+<h2 id="kernel-start的start函数"><a href="#kernel-start的start函数" class="headerlink" title="kernel/start的start函数"></a>kernel/start的start函数</h2><figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">void</span></span><br><span class="line"><span class="title function_">start</span><span class="params">()</span></span><br><span class="line">&#123;</span><br><span class="line">  <span class="comment">// set M Previous Privilege mode to Supervisor, for mret.</span></span><br><span class="line">  <span class="comment">// 将机器模式改为管理模式</span></span><br><span class="line">  <span class="type">unsigned</span> <span class="type">long</span> x = r_mstatus();</span><br><span class="line">  x &amp;= ~MSTATUS_MPP_MASK;</span><br><span class="line">  x |= MSTATUS_MPP_S;</span><br><span class="line">  w_mstatus(x);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// set M Exception Program Counter to main, for mret.</span></span><br><span class="line">  <span class="comment">// requires gcc -mcmodel=medany</span></span><br><span class="line">  <span class="comment">// 将main地址写入mepc寄存器中（mepc寄存器用于做什么？）</span></span><br><span class="line">  w_mepc((uint64)main);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// disable paging for now.</span></span><br><span class="line">  <span class="comment">// 将satp寄存器设置为0，作用是禁用页表映射</span></span><br><span class="line">  w_satp(<span class="number">0</span>);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// delegate all interrupts and exceptions to supervisor mode.</span></span><br><span class="line">  w_medeleg(<span class="number">0xffff</span>);</span><br><span class="line">  w_mideleg(<span class="number">0xffff</span>);</span><br><span class="line">  w_sie(r_sie() | SIE_SEIE | SIE_STIE | SIE_SSIE);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// ask for clock interrupts.</span></span><br><span class="line">  timerinit();</span><br><span class="line"></span><br><span class="line">  <span class="comment">// keep each CPU&#x27;s hartid in its tp register, for cpuid().</span></span><br><span class="line">  <span class="type">int</span> id = r_mhartid();</span><br><span class="line">  w_tp(id);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// switch to supervisor mode and jump to main().</span></span><br><span class="line">  <span class="keyword">asm</span> <span class="title function_">volatile</span><span class="params">(<span class="string">&quot;mret&quot;</span>)</span>;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<ol>
+<li>将机器模式切换到管理模式</li>
+<li>将main函数入口写入到mepc(M Exception Program Counter)寄存器中，前程序计数器？</li>
+<li>w_satp(0); 禁用页表映射</li>
+<li>将中断与异常代理到管理模式下</li>
+<li>开启时钟中断</li>
+<li>记录cpuid到tp寄存器中</li>
+<li>调用mret，返回，弹出了mepc寄存器里main函数地址，开始执行main函数（具体的mret怎么执行还需要看下）。</li>
+</ol>
+<h2 id="main"><a href="#main" class="headerlink" title="main"></a>main</h2>]]></content>
+  </entry>
+  <entry>
+    <title>Xv6 Lab1 Note</title>
+    <url>/2022/10/28/xv6-lab1-note/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p><a href="https://pdos.csail.mit.edu/6.828/2020/labs/util.html">xv6实验一请看这里</a></p>
+<h2 id="sleep"><a href="#sleep" class="headerlink" title="sleep"></a>sleep</h2><blockquote>
+<p>实现一个sleep命令，达到睡眠效果</p>
+</blockquote>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;kernel/types.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;user/user.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">int</span> argc, <span class="type">const</span> <span class="type">char</span> *argv[])</span> &#123;</span><br><span class="line">    <span class="keyword">if</span> (argc != <span class="number">2</span>) &#123;</span><br><span class="line">        <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;usage: sleep &lt;time&gt;\n&quot;</span>);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">fprintf</span>(<span class="number">1</span>, <span class="string">&quot;%d - %s %s\n&quot;</span>, argc, argv[<span class="number">0</span>], argv[<span class="number">1</span>]);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// atoi函数可以将字符转换成数字</span></span><br><span class="line">    sleep(atoi(argv[<span class="number">1</span>]));</span><br><span class="line">    <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>这里很简单，直接系统调用<code>sleep()</code></p>
+<h2 id="pingpong"><a href="#pingpong" class="headerlink" title="pingpong"></a>pingpong</h2><p>要求使用pipe管道传输一个字符，其实就是学习pipe管道的用法，如何创建一个管道<br><code>pipe(int* fd)</code>, 要求传入一个数组，其会返回两个<code>file description</code><br>第一个fd代表read端，指你可以从这一端读取到数据<br>第二个fd代表write端，指你可以从这一端写入数据<br>write -&gt; fd1(write端) ||||||||| fd0(read端) -&gt; read<br>数据流向从fd1流向fd0</p>
+<p>下面代码就是父子进程使用管道传递数据的样例，其使用了两个管道，这也是因为pipe是单向流动的</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="type">int</span> p[<span class="number">2</span>];</span><br><span class="line">    pipe(p);</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;kernel/types.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;user/user.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> PIPE_OUT 0</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> PIPE_IN 1</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">()</span> &#123;</span><br><span class="line">    <span class="comment">/**</span></span><br><span class="line"><span class="comment">     * pipe()</span></span><br><span class="line"><span class="comment">     * 可以搜索sys_pipe来看其具体实现</span></span><br><span class="line"><span class="comment">     * 返回两个fd到传入的数组中</span></span><br><span class="line"><span class="comment">     * 其中，fd0表示管道输出端，读取端</span></span><br><span class="line"><span class="comment">     *      fd1表示管道输入端，写入端</span></span><br><span class="line"><span class="comment">     *      fd1 -&gt; IIIIIIIII -&gt; fd0</span></span><br><span class="line"><span class="comment">     * </span></span><br><span class="line"><span class="comment">     * 如何使用管道呢，</span></span><br><span class="line"><span class="comment">     * 1. 我们将数据msg写入到fd1中，write(fd1, msg)：msg -&gt; fd1</span></span><br><span class="line"><span class="comment">     * 2. 此时数据便通过管道传到了fd0，所以我们需要对fd0的数据做接收</span></span><br><span class="line"><span class="comment">     * 3. 子进程read(fd0, receive) ：fd0 -&gt; receive</span></span><br><span class="line"><span class="comment">     * 4. 疑问，是什么时候read都可以吗，管道里的数据不及时接收有问题吗？</span></span><br><span class="line"><span class="comment">     * 5. 答：执行read时可认为等待输入，会等待管道另一端输入数据。</span></span><br><span class="line"><span class="comment">     */</span></span><br><span class="line">    <span class="type">int</span> pipe_p2c[<span class="number">2</span>]; <span class="comment">//父进程到子进程</span></span><br><span class="line"></span><br><span class="line">    pipe(pipe_p2c); <span class="comment">// 父 -&gt; 子</span></span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> pipe_c2p[<span class="number">2</span>];</span><br><span class="line"></span><br><span class="line">    pipe(pipe_c2p); <span class="comment">// 子 -&gt; 父</span></span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> pid = fork();</span><br><span class="line"></span><br><span class="line">    <span class="type">char</span> buf = <span class="string">&#x27;P&#x27;</span>;</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 出错, 关闭管道退出</span></span><br><span class="line">    <span class="keyword">if</span> (pid &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        close(pipe_p2c[PIPE_IN]);</span><br><span class="line">        close(pipe_p2c[PIPE_OUT]);</span><br><span class="line"></span><br><span class="line">        close(pipe_c2p[PIPE_IN]);</span><br><span class="line">        close(pipe_c2p[PIPE_OUT]);</span><br><span class="line"></span><br><span class="line">        <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;fork pid &lt; 0, pid : %d\n&quot;</span>, pid);</span><br><span class="line"></span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">1</span>);</span><br><span class="line">    &#125; <span class="keyword">else</span> <span class="keyword">if</span> (pid == <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="comment">// 子进程</span></span><br><span class="line">        close(pipe_c2p[PIPE_OUT]);</span><br><span class="line">        close(pipe_p2c[PIPE_IN]);</span><br><span class="line"></span><br><span class="line">        <span class="type">int</span> exit_status = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (read(pipe_p2c[PIPE_OUT], &amp;buf, <span class="keyword">sizeof</span>(<span class="type">char</span>)) == <span class="keyword">sizeof</span>(<span class="type">char</span>)) &#123;</span><br><span class="line">            <span class="built_in">fprintf</span>(<span class="number">1</span>, <span class="string">&quot;%d: received ping\n&quot;</span>, getpid());</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            exit_status = <span class="number">1</span>;</span><br><span class="line">            <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;child read error\n&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (write(pipe_c2p[PIPE_IN], &amp;buf, <span class="keyword">sizeof</span>(<span class="type">char</span>)) != <span class="keyword">sizeof</span>(<span class="type">char</span>)) &#123;</span><br><span class="line">            exit_status = <span class="number">2</span>;</span><br><span class="line">            <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;child write error\n&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">        </span><br><span class="line">        close(pipe_c2p[PIPE_IN]);</span><br><span class="line">        close(pipe_p2c[PIPE_OUT]);</span><br><span class="line"></span><br><span class="line">        <span class="built_in">exit</span>(exit_status);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        <span class="comment">// 父进程</span></span><br><span class="line">        close(pipe_c2p[PIPE_IN]);</span><br><span class="line">        close(pipe_p2c[PIPE_OUT]);</span><br><span class="line"></span><br><span class="line">        <span class="type">int</span> exit_status = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        <span class="type">int</span> writelen = write(pipe_p2c[PIPE_IN], &amp;buf, <span class="keyword">sizeof</span>(<span class="type">char</span>));</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (writelen != <span class="keyword">sizeof</span>(<span class="type">char</span>)) &#123;</span><br><span class="line">            exit_status = <span class="number">2</span>;</span><br><span class="line">            <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;parent write error, writelen: %d\n&quot;</span>, writelen);</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (read(pipe_c2p[PIPE_OUT], &amp;buf, <span class="keyword">sizeof</span>(<span class="type">char</span>)) == <span class="keyword">sizeof</span>(<span class="type">char</span>)) &#123;</span><br><span class="line">            <span class="built_in">fprintf</span>(<span class="number">1</span>, <span class="string">&quot;%d: received pong\n&quot;</span>, getpid());</span><br><span class="line">        &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">            exit_status = <span class="number">1</span>;</span><br><span class="line">            <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;parent read error\n&quot;</span>);</span><br><span class="line">        &#125;</span><br><span class="line">        </span><br><span class="line">        close(pipe_c2p[PIPE_OUT]);</span><br><span class="line">        close(pipe_p2c[PIPE_IN]);</span><br><span class="line"></span><br><span class="line">        <span class="built_in">exit</span>(exit_status);</span><br><span class="line">    &#125;</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="primes-Hard"><a href="#primes-Hard" class="headerlink" title="primes (Hard)"></a>primes (Hard)</h2><p>这个实验最关键的是提到了<a href="https://swtch.com/~rsc/thread/">rsc</a>模型<br>rsc提出了一种新的并发模型的观点，即使用管道通信来实现同步的效果，Golang的并发实践了该观点，有很多讲解的文章可以去搜搜看。</p>
+<p>对于这个实验而言，其实跟rsc没太大关系，大致实现思路是，对于单独的一根管道，这根管道有一个基质数，所有他整除的数都会被过滤掉，没被过滤的数进入下一根管道去过滤，以此来实现<strong>线性素数筛</strong>。</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;kernel/types.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;user/user.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> RD 0</span></span><br><span class="line"><span class="meta">#<span class="keyword">define</span> WR 1</span></span><br><span class="line"></span><br><span class="line"><span class="type">int</span> <span class="title function_">createSieveProgress</span><span class="params">(<span class="type">int</span> parentPipe[<span class="number">2</span>])</span> &#123;</span><br><span class="line">    close(parentPipe[WR]); <span class="comment">//关闭父输入端</span></span><br><span class="line">    <span class="type">int</span> baseprime = <span class="number">0</span>;</span><br><span class="line">    <span class="keyword">if</span> (read(parentPipe[RD], &amp;baseprime, <span class="keyword">sizeof</span>(<span class="type">int</span>)) != <span class="keyword">sizeof</span>(<span class="type">int</span>)) &#123;</span><br><span class="line">        <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="built_in">printf</span>(<span class="string">&quot;prime %d\n&quot;</span>, baseprime);</span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> data = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> p[<span class="number">2</span>];</span><br><span class="line">    </span><br><span class="line">    pipe(p);</span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> (read(parentPipe[RD], &amp;data, <span class="keyword">sizeof</span>(<span class="type">int</span>) == <span class="keyword">sizeof</span>(<span class="type">int</span>))) &#123;</span><br><span class="line">        <span class="keyword">if</span> (data % baseprime) &#123;</span><br><span class="line">            write(p[WR], &amp;data, <span class="keyword">sizeof</span>(<span class="type">int</span>));</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    </span><br><span class="line">    <span class="keyword">if</span> (fork()) &#123;</span><br><span class="line">        close(p[WR]);</span><br><span class="line">        close(p[RD]);</span><br><span class="line">        wait(<span class="number">0</span>);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        createSieveProgress(p);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * @brief 线性素数筛 通道版本</span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * 这里要求使用通道来对素数筛选，每个通道仅筛选其中一项素数</span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * 1. 先来个生成2-35数的进程</span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * 2. 创建管道过滤</span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * 1. 每个通道筛选其遇到的第一个素数，当通道无法从上一个通道获得质数时，便关闭</span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * 问题1：进程的孙子进程关闭时，进程的wait会受到影响吗？</span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * @param argc </span></span><br><span class="line"><span class="comment"> * @param argv </span></span><br><span class="line"><span class="comment"> * @return int </span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">int</span> argc, <span class="type">char</span> <span class="type">const</span> *argv[])</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="type">int</span> p[<span class="number">2</span>];</span><br><span class="line"></span><br><span class="line">    pipe(p);</span><br><span class="line"></span><br><span class="line">    <span class="comment">// 父进程，用于生成源数据 2-35</span></span><br><span class="line">    <span class="keyword">for</span> (<span class="type">int</span> i = <span class="number">2</span>; i &lt; <span class="number">36</span>; i++) &#123; write(p[WR], &amp;i, <span class="keyword">sizeof</span>(<span class="type">int</span>)); &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (fork()) &#123;</span><br><span class="line">        close(p[RD]);</span><br><span class="line">        close(p[WR]);</span><br><span class="line">        wait(<span class="number">0</span>);</span><br><span class="line">    &#125; <span class="keyword">else</span> &#123;</span><br><span class="line">        createSieveProgress(p);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<h2 id="find"><a href="#find" class="headerlink" title="find"></a>find</h2><p>实现find命令，类似这样find . a，即在当前目录递归寻找与a同名的文件。</p>
+<p>find命令的编写还是有趣的，实验指导提示可以参照ls是如何遍历目录的。</p>
+<p>这里会学习到一些函数例如fstat、stat，以及目录项<code>dirent</code></p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;kernel/types.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;user/user.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;kernel/stat.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;kernel/fs.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"><span class="type">void</span> <span class="title function_">find</span><span class="params">(<span class="type">const</span> <span class="type">char</span> *path, <span class="type">const</span> <span class="type">char</span> *filename)</span> &#123;</span><br><span class="line">    <span class="type">char</span> buf[<span class="number">512</span>], *p;</span><br><span class="line">    <span class="type">int</span> fd;</span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">dirent</span> <span class="title">de</span>;</span></span><br><span class="line">    <span class="class"><span class="keyword">struct</span> <span class="title">stat</span> <span class="title">st</span>;</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> ((fd = open(path, <span class="number">0</span>)) &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;find: cannot open: %s\n&quot;</span>, path);</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (fstat(fd, &amp;st) &lt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;find: cannot fstat: %s\n&quot;</span>, path);</span><br><span class="line">        close(fd);</span><br><span class="line">        <span class="keyword">return</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (st.type != T_DIR) &#123;</span><br><span class="line">        <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;param1 not a dir: %s\n&quot;</span>, path);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">strcpy</span>(buf, path);</span><br><span class="line"></span><br><span class="line">    p = buf + <span class="built_in">strlen</span>(path);</span><br><span class="line"></span><br><span class="line">    *p++ = <span class="string">&#x27;/&#x27;</span>; <span class="comment">//此时p指向/的下一位上</span></span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> (read(fd, &amp;de, <span class="keyword">sizeof</span>(de)) == <span class="keyword">sizeof</span>(de)) &#123;</span><br><span class="line">        <span class="comment">// 表明没啥用的目录项</span></span><br><span class="line">        <span class="keyword">if</span> (de.inum == <span class="number">0</span>) &#123;</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br><span class="line">        memmove(p, de.name, DIRSIZ);</span><br><span class="line">        p[DIRSIZ] = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">        <span class="keyword">if</span> (stat(buf, &amp;st) &lt; <span class="number">0</span>) &#123;</span><br><span class="line">            <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;error&quot;</span>);</span><br><span class="line">            <span class="keyword">continue</span>;</span><br><span class="line">        &#125;</span><br><span class="line"></span><br><span class="line">        <span class="comment">// 是目录，同时排除在.与..中递归</span></span><br><span class="line">        <span class="keyword">if</span> (st.type == T_DIR &amp;&amp; <span class="built_in">strcmp</span>(p, <span class="string">&quot;.&quot;</span>) != <span class="number">0</span> &amp;&amp; <span class="built_in">strcmp</span>(p, <span class="string">&quot;..&quot;</span>) != <span class="number">0</span>) &#123;</span><br><span class="line">            find(buf, filename);</span><br><span class="line">        &#125; <span class="keyword">else</span> <span class="keyword">if</span> (<span class="built_in">strcmp</span>(filename, p) == <span class="number">0</span>) &#123;</span><br><span class="line">            <span class="built_in">printf</span>(<span class="string">&quot;%s\n&quot;</span>, buf);</span><br><span class="line">        &#125;    </span><br><span class="line">    &#125;</span><br><span class="line">    close(fd);</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * @brief Write a simple version of the UNIX find program: </span></span><br><span class="line"><span class="comment"> * find all the files in a directory tree with a specific name. </span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * 1. 看下ls.c是怎么遍历文件的</span></span><br><span class="line"><span class="comment"> *      1. open 指定目录，从指定目录开始遍历</span></span><br><span class="line"><span class="comment"> *      2. 系统调用fstat获取当前fd的信息，打印出结果</span></span><br><span class="line"><span class="comment"> *      </span></span><br><span class="line"><span class="comment"> * 2. 参照ls.c的做法</span></span><br><span class="line"><span class="comment"> *      1. open 指定目录，从该目录开始遍历</span></span><br><span class="line"><span class="comment"> *      2. 如何遍历，调用read读取目录项，dirent，拼接dirent名称，再用open的形式获取fd，再获取fstat</span></span><br><span class="line"><span class="comment"> *      2. 系统调用fstat获取当前fd的信息，若为文件，则字符串比较，若为目录，则执行递归的寻找操作</span></span><br><span class="line"><span class="comment"> *     </span></span><br><span class="line"><span class="comment"> * @param argc </span></span><br><span class="line"><span class="comment"> * @param argv </span></span><br><span class="line"><span class="comment"> * @return int </span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">int</span> argc, <span class="type">char</span> <span class="type">const</span> *argv[])</span> &#123;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">if</span> (argc != <span class="number">3</span>) &#123;</span><br><span class="line">        <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;usage: find &lt;directory&gt; &lt;filename&gt;&quot;</span>);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    find(argv[<span class="number">1</span>], argv[<span class="number">2</span>]);</span><br><span class="line">    <span class="keyword">return</span> <span class="number">0</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br></pre></td></tr></table></figure>
+
+<h2 id="xargs-重点"><a href="#xargs-重点" class="headerlink" title="xargs (重点)"></a>xargs (重点)</h2><p>看代码吧，不多做解释了</p>
+<figure class="highlight c"><table><tr><td class="code"><pre><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;kernel/types.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;kernel/stat.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;kernel/param.h&quot;</span></span></span><br><span class="line"><span class="meta">#<span class="keyword">include</span> <span class="string">&quot;user/user.h&quot;</span></span></span><br><span class="line"></span><br><span class="line"></span><br><span class="line"><span class="type">void</span> <span class="title function_">xargs</span><span class="params">(<span class="type">char</span> *argv[])</span> &#123;</span><br><span class="line">    <span class="type">int</span> pid, status;</span><br><span class="line">    <span class="keyword">if</span> ((pid=fork()) == <span class="number">0</span>) &#123;</span><br><span class="line">        exec(argv[<span class="number">0</span>], argv);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line">    wait(&amp;status);</span><br><span class="line">    <span class="keyword">return</span>;</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * @brief Write a simple version of the UNIX xargs program: </span></span><br><span class="line"><span class="comment"> * read lines from the standard input and run a command for each line,</span></span><br><span class="line"><span class="comment"> * supplying the line as arguments to the command.</span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * 1. 调用fork与exec来执行每个command，并使用wait来等待子进程完成输出</span></span><br><span class="line"><span class="comment"> * 2. 子进程可能输出多行，父进程在读入时需要注意，多行对应需要父进程执行多条命令</span></span><br><span class="line"><span class="comment"> * 3. kernel/param.h定义了MAXARG，或许对你定义argv array有帮助</span></span><br><span class="line"><span class="comment"> * 4. 记得修改Makefile中的UPROGS，记得make clean</span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * 1. 当 command line中输出xargs时，这时我们会用标准输入中的每一行去执行xargs后的命令行</span></span><br><span class="line"><span class="comment"> * 忽略标准输入这点，xargs后面跟随的就是一条命令，一条待补充参数的命令，待补充参数就来自xargs前执行得到的结果</span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * 就相当于是fork子进程去执行n条命令 </span></span><br><span class="line"><span class="comment"> * </span></span><br><span class="line"><span class="comment"> * @param argc </span></span><br><span class="line"><span class="comment"> * @param argv </span></span><br><span class="line"><span class="comment"> * @return int </span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="type">int</span> <span class="title function_">main</span><span class="params">(<span class="type">int</span> argc, <span class="type">char</span> *argv[])</span> &#123;</span><br><span class="line">    <span class="type">int</span> i, j;</span><br><span class="line">    <span class="type">char</span> c, buf[<span class="number">512</span>], *xargv[MAXARG] = &#123;<span class="number">0</span>&#125;;</span><br><span class="line">    <span class="keyword">if</span> (argc &lt; <span class="number">2</span> || argc - <span class="number">1</span> &gt; MAXARG) &#123;</span><br><span class="line">        <span class="built_in">fprintf</span>(<span class="number">2</span>, <span class="string">&quot;usage: xargs &lt;cmd&gt; &#123;args&#125;, # of args should be less than 32\n&quot;</span>);</span><br><span class="line">        <span class="built_in">exit</span>(<span class="number">1</span>);</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="built_in">memset</span>(buf, <span class="number">0</span>, <span class="keyword">sizeof</span>(buf));</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (i = <span class="number">1</span>; i &lt; argc; i++) &#123;</span><br><span class="line">        xargv[i - <span class="number">1</span>] = argv[i];</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">for</span> (; i &lt; MAXARG; i++) &#123;</span><br><span class="line">        xargv[i] = <span class="number">0</span>;</span><br><span class="line">    &#125;</span><br><span class="line"></span><br><span class="line">    j = <span class="number">0</span>;</span><br><span class="line"></span><br><span class="line">    <span class="keyword">while</span> (read(<span class="number">0</span>, &amp;c, <span class="number">1</span>) &gt; <span class="number">0</span>) &#123;</span><br><span class="line">        <span class="keyword">if</span> (c != <span class="string">&#x27;\n&#x27;</span>)</span><br><span class="line">            buf[j++] = c;</span><br><span class="line">        <span class="keyword">else</span> &#123;</span><br><span class="line">            <span class="keyword">if</span> (j != <span class="number">0</span>) &#123;</span><br><span class="line">                buf[j] = <span class="string">&#x27;\0&#x27;</span>;</span><br><span class="line">                xargv[argc - <span class="number">1</span>] = buf;</span><br><span class="line">                xargs(xargv);</span><br><span class="line">                j = <span class="number">0</span>;</span><br><span class="line">            &#125;</span><br><span class="line">        &#125;</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="keyword">if</span> (j != <span class="number">0</span>) &#123;</span><br><span class="line">        buf[j] = <span class="string">&#x27;\0&#x27;</span>;</span><br><span class="line">        xargv[argc - <span class="number">1</span>] = buf;</span><br><span class="line">        xargs(xargv);</span><br><span class="line">    &#125;</span><br><span class="line">    <span class="built_in">exit</span>(<span class="number">0</span>);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+]]></content>
+  </entry>
+  <entry>
+    <title>列个计划吧</title>
+    <url>/2022/10/30/%E5%88%97%E4%B8%AA%E8%AE%A1%E5%88%92%E5%90%A7/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>玩了十一个月，玩起来的日子过得可真快呀，靠时间去想明白一些事情确实是有成本的，但是不想明白心里也总是有刺一样，接下来的日子要继续从三项基础技术抓起，逐渐步入正轨，至于客户端还是服务端，也想明白了，客户端还是更加适合我一些，尽管某些时候很讨厌客户端的一些职责，尽管某些时候很喜欢服务端做的事情。为什么选择客户端呢，相比服务端，客户端对于自己的项目与架构拥有更完善的视角，也拥有更多可控力，服务端总有些枯燥乏味的感觉，同时自身也有一两年的客户端开发经验，所以选择一条轻松喜欢的道路何乐而不为呢，毕竟将来人生的道路也有了新的选择。（回老家开超市哈哈哈哈。）</p>
+<p>所以，列个计划吧。</p>
+<h2 id="巩固基础"><a href="#巩固基础" class="headerlink" title="巩固基础"></a>巩固基础</h2><p>没什么好说的，提升这三者的理解至关重要，基础必须牢嘛</p>
+<h3 id="算法"><a href="#算法" class="headerlink" title="算法"></a>算法</h3><p>23年快要过去了，接下来的几年我都要跟进算法，毕竟这个东西是能提升编码能力的东西，还锻炼脑子</p>
+<p>leetcode每日一题</p>
+<p>双周单周赛</p>
+<p>记录每次遇到的新的问题与新解。</p>
+<h3 id="操作系统"><a href="#操作系统" class="headerlink" title="操作系统"></a>操作系统</h3><p>xv6整体实验</p>
+<p>再把常考的面试要点记录整理下</p>
+<h3 id="计算机网络"><a href="#计算机网络" class="headerlink" title="计算机网络"></a>计算机网络</h3><p>HTTP</p>
+<p>TCP/IP</p>
+<p>就这么多</p>
+<h2 id="Android技术"><a href="#Android技术" class="headerlink" title="Android技术"></a>Android技术</h2><p>别提了，我要学个遍</p>
+<h2 id="为面试做准备"><a href="#为面试做准备" class="headerlink" title="为面试做准备"></a>为面试做准备</h2><p>最重要的点，总结过去的经历，感谢我的团队，我很想念和你们工作的那段日子，哈哈~</p>
+<h2 id="TODO"><a href="#TODO" class="headerlink" title="TODO"></a>TODO</h2><p>xv6实验</p>
+]]></content>
+  </entry>
+  <entry>
+    <title>操作系统学习笔记</title>
+    <url>/2022/07/12/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script>]]></content>
+  </entry>
+  <entry>
+    <title>添加远程库</title>
+    <url>/2022/10/28/%E6%B7%BB%E5%8A%A0%E8%BF%9C%E7%A8%8B%E5%BA%93/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>当你本地有一个仓库，还没有对应的远端仓库，你想把他推到远端去，首先需要在远端（这里拿github举例）创建仓库</p>
+<p>当你创建完一个仓库的时候，这时github其实已经提示你如何操作了，类似这样</p>
+<p><code>git remote add origin git@github.com:michaelliao/learngit.git</code></p>
+<p>这步就是添加一个名叫<code>origin</code>的远端仓库</p>
+<p>同时，如果你已经有了一个名叫origin的远端仓库，可以通过以下两种方式来更改</p>
+<ol>
+<li><p>更换<code>origin</code>的仓库url: <code>git remote set-url origin git://new.url.here</code></p>
+</li>
+<li><p>删除<code>origin</code>远端仓库并重新添加</p>
+<ul>
+<li><code>git remote remove origin</code></li>
+<li><code>git remote add origin git@github.com:michaelliao/learngit.git</code></li>
+</ul>
+</li>
+</ol>
+<p>接下来你就可以将自己的分支push上去了, <code>git push origin dev:dev</code></p>
+<p>这就是以上如何创建远端分支的内容。</p>
+<ul>
+<li><a href="https://www.liaoxuefeng.com/wiki/896043488029600/898732864121440">-&gt;&gt; 参考文档</a></li>
+</ul>
+]]></content>
+      <tags>
+        <tag>git</tag>
+      </tags>
+  </entry>
+  <entry>
+    <title>高速缓存与一致性</title>
+    <url>/2022/07/16/%E9%AB%98%E9%80%9F%E7%BC%93%E5%AD%98%E4%B8%8E%E4%B8%80%E8%87%B4%E6%80%A7/</url>
+    <content><![CDATA[<link rel="stylesheet" class="aplayer-secondary-style-marker" href="/assets/css/APlayer.min.css"><script src="/assets/js/APlayer.min.js" class="aplayer-secondary-script-marker"></script><p>前面学习了蛮久的CPU Cache内容，CPU Cache用来做CPU与主存间的数据缓存，CPU Cache的地址与主存间的地址再用映射策略来映射起来，的映射策略有直接映射，组相连映射，全相连映射。当CPU想要查找某个地址的数据时，会携带TAG、Index、Offset三样数据来去CPU Cache中查找是否有缓存。那么，这里有个疑问，TAG的作用我们知道，当根据Index查找到对应的Cache Line后，根据Cache Line中的Cache来判断是不是要找的那一块主存地址，那么TAG是怎么取的呢，他是怎么代表物理地址的唯一性的，如果他能代表唯一性，为什么不直接使用TAG来查找地址呢？</p>
+<p>Q: TAG是根据什么算出来的，为什么使用TAG作为标识而不作为地址直接使用？</p>
+<p>A: 其实只要知道TAG + Index + Offset = 主存地址，就OK了，那么根据TAG + Index则一定可以取得唯一的 <code>Main Memory Block</code>，而为什么不是直接使用地址进行标识呢，也很简单，使用Index可以更快的查找到Cache Line的地址，就根数组类似Cache Line[Index]如此。</p>
+<p>Q: 再说下直接映射、组相连映射、全相连映射的优缺点。</p>
+<p>A: 直接映射逻辑简单，对应的硬件设计也会简单轻松。直接映射就是取模，模相同的主存地址就使用同一块<code>Cache Line</code>。缺点是当同意时间内访问的都是模相同的不同地址时，那么此时都是从同一Cache Line访问的，这时就会导致缓存失效，都从主存上读取数据，这种现象被称为Cache颠簸。为了解决Cache颠簸问题，引入了组相连映射的方式，与直接映射相比呢，最大的区别就是多了组的概念，以两组相连映射举例，即一个Index下，有两个地方都能存放Cache，比如0x80与0x40都可以存放到Index为0x20的位置，那么就可以把0x80放到组1、0x40放到组2、那么此时来回读取0x80和0x40也不会发生Cache颠簸的问题了，两组相连映射时，查找一个物理地址时，根据Index找到两个组的地址，再分别比较两个组的TAG，多组相连映射即对比多个组的TAG。全相连可以认为全是组，没有Index只有TAG，查找数据时需要便利所有TAG来找，直接没有了Cache颠簸问题，但相对的硬件成本更高。</p>
+<p>我们知道有虚拟内存的概念，那么CPU Cache里面存放的是虚拟地址还是物理地址呢？</p>
+<h2 id="CPU-Cache存放的是虚拟地址还是物理地址呢？"><a href="#CPU-Cache存放的是虚拟地址还是物理地址呢？" class="headerlink" title="CPU Cache存放的是虚拟地址还是物理地址呢？"></a>CPU Cache存放的是虚拟地址还是物理地址呢？</h2><p>如何看CPU Cache里面存放的是虚拟地址还是物理地址呢？那就需要看MMU是什么时机起作用的了。如果介于CPU Cache与Main Memory之间，那么就是VIVT(虚拟高速缓存)，即CPU Cache中存放的是虚拟地址，CPU直接用虚拟地址在CPU Cache中查找数据，当Cache Miss时，则使用MMU把虚拟地址转换成物理地址，再去主存中查找。VIVT引入了两个问题：</p>
+<h3 id="别名"><a href="#别名" class="headerlink" title="别名"></a>别名</h3><p>何为别名，就是同一物理地址被映射到不同的虚拟地址，这在不同进程间很常见，那么此时由于Virtual Index和Virtual Tag，CPU Cache判断这俩虚拟地址不是同一物理地址，那么当这两处虚拟地址的修改则是相互不可见的，就会引发数据错乱的问题。</p>
+<h3 id="歧义"><a href="#歧义" class="headerlink" title="歧义"></a>歧义</h3><p>何为歧义，就是相同的虚拟地址映射到的是不同的物理地址，因为Tag与Virtual都是虚拟的，它想要与物理地址联系起来必须通过MMU、在没有经过MMU翻译前、是会存在不同的物理地址被相同的Tag+Virtual表达的，那么就会出现明明想要地址A的数据，却读到了地址B的数据，这是很危险的。</p>
+<p>怎么解决上述两个问题呢？我们先来看下PIPT</p>
+<h2 id="PIPT-物理高速缓存"><a href="#PIPT-物理高速缓存" class="headerlink" title="PIPT 物理高速缓存"></a>PIPT 物理高速缓存</h2><p>当MMU作用于CPU于CPU Cache之间时，那么CPU Cache里面所使用的地址就是物理地址，其所使用的Tag + Index是可以与主存一一对应起来的，那么此时还存在上面的别名和歧义问题吗，自然不会有。看起来这样很好，有什么缺点呢？时间上，当MMU作用于CPU与CPU Cache之间，那么意味着，每次CPU想要取些数据，都需要经过MMU翻译才可以，只有翻译完成后，使用翻译后的物理数据再与CPU Cache交互，经过了一层MMU，性能下降了。</p>
+<p>怎么解决性能下降问题呢？</p>
+<h2 id="VIPT-物理标记的虚拟高速缓存"><a href="#VIPT-物理标记的虚拟高速缓存" class="headerlink" title="VIPT 物理标记的虚拟高速缓存"></a>VIPT 物理标记的虚拟高速缓存</h2><p>如果可以将地址翻译与寻找一起做的话，使用并行的思想去搞, 速度不就上来了吗，那么怎么在没翻译前，还能寻找Cache Line呢，那么就使用虚拟Index，整个过程就是，使用虚拟Index查找CPU Cache的同时，使用MMU翻译地址得到物理Tag，再与通过Index寻找到的Cache Line的Tag比较，相同则hit，不同则miss。</p>
+<p>那么此时还存在别名或歧义问题吗？</p>
+<h3 id="别名-1"><a href="#别名-1" class="headerlink" title="别名"></a>别名</h3><p>何为别名，就是同一物理地址被映射到不同的虚拟地址，那么存在这种情况吗。由于Index是虚拟的，假设系统使用的是直接映射高速缓存，cache大小是8KB，cacheline大小是256字节。这种情况下的VIPT就存在别名问题。因为index来自虚拟地址位&lt;12…8&gt;，虚拟地址和物理地址的位&lt;11…8&gt;是一样的，但是bit12却不一定相等。 假设虚拟地址0x0000和虚拟地址0x1000都映射相同的物理地址0x4000。那么程序读取0x0000时，系统将会从物理地址0x4000的数据加载到第0x00行cacheline。然后程序读取0x1000数据，再次把物理地址0x4000的数据加载到第0x10行cacheline。这不，别名出现了。相同物理地址的数据被加载到不同cacheline中。</p>
+<h3 id="歧义-1"><a href="#歧义-1" class="headerlink" title="歧义"></a>歧义</h3><p>何为歧义，就是相同的虚拟地址映射到的是不同的物理地址，存在这种情况吗，显然因为Tag对于物理内存可以认为是唯一的，就不存在会有相同的P Tag + V Index可以指向不同的 P Tag + P Index的。</p>
+<h3 id="如何解决VIPT-Cache别名问题"><a href="#如何解决VIPT-Cache别名问题" class="headerlink" title="如何解决VIPT Cache别名问题"></a>如何解决VIPT Cache别名问题</h3><p>我们接着上面的例子说明。首先出现问题的场景是共享映射，也就是多个虚拟地址映射同一个物理地址才可能出现问题。我们需要想办法避免相同的物理地址数据加载到不同的cacheline中。如何做到呢？那我们就避免上个例子中0x1000映射0x4000的情况发生。我们可以将虚拟地址0x2000映射到物理地址0x4000，而不是用虚拟地址0x1000。0x2000对应第0x00行cacheline，这样就避免了别名现象出现。因此，在建立共享映射的时候，返回的虚拟地址都是按照cache大小对齐的地址，这样就没问题了。如果是多路组相连高速缓存的话，返回的虚拟地址必须是满足一路cache大小对齐。在Linux的实现中，就是通过这种方法解决别名问题。</p>
+<h3 id="总结"><a href="#总结" class="headerlink" title="总结"></a>总结</h3><p>VIVT Cache问题太多，软件维护成本过高，是最难管理的高速缓存。所以现在基本只存在历史的文章中。现在我们基本看不到硬件还在使用这种方式的cache。现在使用的方式是PIPT或者VIPT。如果多路组相连高速缓存的一路的大小小于等于4KB，一般硬件采用VIPT方式，因为这样相当于PIPT，岂不美哉。当然，如果一路大小大于4KB，一般采用PIPT方式，也不排除VIPT方式，这就需要操作系统多操点心了。</p>
+<h2 id="TLB"><a href="#TLB" class="headerlink" title="TLB"></a>TLB</h2><p>TLB是translation lookaside buffer的简称。首先，我们知道MMU的作用是把虚拟地址转换成物理地址。虚拟地址和物理地址的映射关系存储在页表中，而现在页表又是分级的。64位系统一般都是3~5级。常见的配置是4级页表，就以4级页表为例说明。分别是PGD、PUD、PMD、PTE四级页表。在硬件上会有一个叫做页表基地址寄存器，它存储PGD页表的首地址。MMU就是根据页表基地址寄存器从PGD页表一路查到PTE，最终找到物理地址(PTE页表中存储物理地址)。四级页表查找过程需要四次内存访问。延时可想而知，非常影响性能。由此引入了TLB，TLB其实就是一块高速缓存。数据cache缓存地址(虚拟地址或者物理地址)和数据。TLB缓存虚拟地址和其映射的物理地址。TLB根据虚拟地址查找cache，它没得选，只能根据虚拟地址查找。所以TLB是一个虚拟高速缓存。硬件存在TLB后，虚拟地址到物理地址的转换过程发生了变化。虚拟地址首先发往TLB确认是否命中cache，如果cache hit直接可以得到物理地址。</p>
+<h3 id="TLB的别名问题"><a href="#TLB的别名问题" class="headerlink" title="TLB的别名问题"></a>TLB的别名问题</h3><p>我先来思考第一个问题，别名是否存在。我们知道PIPT的数据cache不存在别名问题。物理地址是唯一的，一个物理地址一定对应一个数据。但是不同的物理地址可能存储相同的数据。也就是说，物理地址对应数据是一对一关系，反过来是多对一关系。由于TLB的特殊性，存储的是虚拟地址和物理地址的对应关系。因此，对于单个进程来说，同一时间一个虚拟地址对应一个物理地址，一个物理地址可以被多个虚拟地址映射。将PIPT数据cache类比TLB，我们可以知道TLB不存在别名问题。而VIVT Cache存在别名问题，原因是VA需要转换成PA，PA里面才存储着数据。中间多经传一手，所以引入了些问题。</p>
+<h3 id="TLB的歧义问题"><a href="#TLB的歧义问题" class="headerlink" title="TLB的歧义问题"></a>TLB的歧义问题</h3><p>我们知道不同的进程之间看到的虚拟地址范围是一样的，所以多个进程下，不同进程的相同的虚拟地址可以映射不同的物理地址。这就会造成歧义问题。例如，进程A将地址0x2000映射物理地址0x4000。进程B将地址0x2000映射物理地址0x5000。当进程A执行的时候将0x2000对应0x4000的映射关系缓存到TLB中。当切换B进程的时候，B进程访问0x2000的数据，会由于命中TLB从物理地址0x4000取数据。这就造成了歧义。如何消除这种歧义，我们可以借鉴VIVT数据cache的处理方式，在进程切换时将整个TLB无效。切换后的进程都不会命中TLB，但是会导致性能损失。</p>
+<h3 id="如何尽可能的避免flush-TLB"><a href="#如何尽可能的避免flush-TLB" class="headerlink" title="如何尽可能的避免flush TLB"></a>如何尽可能的避免flush TLB</h3><p>在TLB中引入ASID的概念用来标记进程，在TLB比较Tag的同时，也去比较ASID就可以了。ASID是怎么管理的呢？我们知道进程都拥有自己的PID，但是PID的范围太大了，不适合在TLB中存储，为了尽量减少空间占用，以32位为例，ASID仅使用8bit，也就是只能区分256个进程，可是往往我们的进程并不止256个，那该怎么办呢，其实不用对所有进程都进行标记，只需要标记最近使用的256个进程就OK了，TLB本身缓存的内容也是最近使用的页表映射，那么当256个标记使用完毕后，此时就会清除其他进程标记，flush TLB，重新对进程标记。可以看到，使用了ASID后，就不需要切换进程时就flush TLB了，减少了性能损耗。</p>
+<h3 id="更上一层楼"><a href="#更上一层楼" class="headerlink" title="更上一层楼"></a>更上一层楼</h3><p>我们知道内核空间和用户空间是分开的，并且内核空间是所有进程共享。既然内核空间是共享的，进程A切换进程B的时候，如果进程B访问的地址位于内核空间，完全可以使用进程A缓存的TLB。但是现在由于ASID不一样，导致TLB miss。我们针对内核空间这种全局共享的映射关系称之为global映射。针对每个进程的映射称之为non-global映射。所以，我们在最后一级页表中引入一个bit(non-global (nG) bit)代表是不是global映射。当虚拟地址映射物理地址关系缓存到TLB时，将nG bit也存储下来。当判断是否命中TLB时，当比较tag相等时，再判断是不是global映射，如果是的话，直接判断TLB hit，无需比较ASID。当不是global映射时，最后比较ASID判断是否TLB hit。</p>
+<h3 id="什么时候应该flush-TLB"><a href="#什么时候应该flush-TLB" class="headerlink" title="什么时候应该flush TLB"></a>什么时候应该flush TLB</h3><p>我们再来最后的总结，什么时候应该flush TLB。</p>
+<ul>
+<li>当ASID分配完的时候，需要flush全部TLB。ASID的管理可以使用bitmap管理，flush TLB后clear整个bitmap。</li>
+<li>当我们建立页表映射的时候，就需要flush虚拟地址对应的TLB表项。第一印象可能是修改页表映射的时候才需要flush TLB，但是实际情<br>况是只要建立映射就需要flush TLB。原因是，建立映射时你并不知道之前是否存在映射。例如，建立虚拟地址A到物理地址B的映射，我们并不知道之前是否存在虚拟地址A到物理地址C的映射情况。所以就统一在建立映射关系的时候flush TLB。</li>
+</ul>
+]]></content>
+      <tags>
+        <tag>操作系统</tag>
+        <tag>CPU</tag>
+        <tag>CPU Cache</tag>
       </tags>
   </entry>
 </search>

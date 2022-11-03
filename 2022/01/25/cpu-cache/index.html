@@ -26,13 +26,15 @@
   <meta name="description" content="CPU Cache的数据结构与读取过程 CPU Cache的数据是从内存中读取过来的，它是以一小块一小块读取数据的，而不是按照单个元素来读取数据的，在CPU Cache中，这样一小块一小块的数据，被称为Cache Line (缓存块)。Cache Line对应到内存的那一小块数据称为Block(内存块)。 可以使用以下命令查看Cache Line的大小:  linux1 2   $ cat &#x2F;sy">
 <meta property="og:type" content="article">
 <meta property="og:title" content="CPU Cache">
-<meta property="og:url" content="https://lucidreamiss.github.io/2022/07/02/cpu-cache/index.html">
+<meta property="og:url" content="https://lucidreamiss.github.io/2022/01/25/cpu-cache/index.html">
 <meta property="og:site_name" content="清明梦">
 <meta property="og:description" content="CPU Cache的数据结构与读取过程 CPU Cache的数据是从内存中读取过来的，它是以一小块一小块读取数据的，而不是按照单个元素来读取数据的，在CPU Cache中，这样一小块一小块的数据，被称为Cache Line (缓存块)。Cache Line对应到内存的那一小块数据称为Block(内存块)。 可以使用以下命令查看Cache Line的大小:  linux1 2   $ cat &#x2F;sy">
 <meta property="og:locale" content="zh_CN">
 <meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/cpu-cache/%E6%B1%82%E6%A8%A1%E6%98%A0%E5%B0%84%E7%AD%96%E7%95%A5.webp">
-<meta property="article:published_time" content="2022-07-02T11:50:59.000Z">
-<meta property="article:modified_time" content="2022-07-02T11:50:59.000Z">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/cpu-cache/%E7%BC%93%E5%AD%98%E4%B8%80%E8%87%B4%E6%80%A7%E9%97%AE%E9%A2%98%E4%BE%8B%E5%AD%902.webp">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/cpu-cache/_MESI%E7%8A%B6%E6%80%81%E8%BD%AC%E6%8D%A2%E8%A1%A8%E6%A0%BC.webp">
+<meta property="article:published_time" content="2022-01-25T11:50:59.000Z">
+<meta property="article:modified_time" content="2022-01-25T11:50:59.000Z">
 <meta property="article:author" content="涛桑">
 <meta property="article:tag" content="操作系统">
 <meta property="article:tag" content="CPU">
@@ -40,7 +42,7 @@
 <meta name="twitter:card" content="summary">
 <meta name="twitter:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/cpu-cache/%E6%B1%82%E6%A8%A1%E6%98%A0%E5%B0%84%E7%AD%96%E7%95%A5.webp">
 
-<link rel="canonical" href="https://lucidreamiss.github.io/2022/07/02/cpu-cache/">
+<link rel="canonical" href="https://lucidreamiss.github.io/2022/01/25/cpu-cache/">
 
 
 <script id="page-configurations">
@@ -202,7 +204,7 @@
   
   
   <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
-    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/07/02/cpu-cache/">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/01/25/cpu-cache/">
 
     <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
       <meta itemprop="image" content="/favicon.png">
@@ -225,7 +227,7 @@
               </span>
               <span class="post-meta-item-text">发表于</span>
 
-              <time title="创建时间：2022-07-02 19:50:59" itemprop="dateCreated datePublished" datetime="2022-07-02T19:50:59+08:00">2022-07-02</time>
+              <time title="创建时间：2022-01-25 19:50:59" itemprop="dateCreated datePublished" datetime="2022-01-25T19:50:59+08:00">2022-01-25</time>
             </span>
 
           
@@ -233,13 +235,13 @@
               <span class="post-meta-item-icon">
                 <i class="far fa-file-word"></i>
               </span>
-              <span>1.5k</span>
+              <span>2.9k</span>
             </span>
             <span class="post-meta-item" title="阅读时长">
               <span class="post-meta-item-icon">
                 <i class="far fa-clock"></i>
               </span>
-              <span>1 分钟</span>
+              <span>3 分钟</span>
             </span>
 
         </div>
@@ -274,8 +276,36 @@
 <li>当CPU Cache没有数据时，直接把数据写入到内存中。</li>
 </ul>
 </li>
-<li>写回</li>
+<li>写回，为减少数据同步内存的频率，就出现了写回机制：当发生写操作时，新的数据仅仅被写入Cache Block中，只有当修改过的Cache Block<em>被替换</em>时，才需要写到内存中，以此来减少写回频率。<ul>
+<li>当CPU Cache中有数据时，将数据写到CPU Cache中，并将数据标记为脏。</li>
+<li>当CPU Cache中对应的Cache Line存放的是另一块Block数据时，如果该Cache Line被标记为脏，则需要将其写入到内存中，然后再将需要的数据从内存写入到CPU Cache中，再讲CPU返回的数据写到CPU Cache中，同时将其标记为脏。（为什么不直接把数据写入到内存里呢？而是间接使用Cache呢？实际上在单核CPU中，这么多是没有问题的，而对于多核CPU，就存在缓存一致性的问题了，这样做的目的就是为了保持缓存一致性。）</li>
 </ul>
+</li>
+</ul>
+<h2 id="缓存一致性问题"><a href="#缓存一致性问题" class="headerlink" title="缓存一致性问题"></a>缓存一致性问题</h2><p>在单核CPU的操作系统中，该问题不存在，现在计算机大多是多核CPU，每个CPU核心都有自己独立的CPU Cache，此时就会出现CPU的缓存一致性问题。<br>举个例子：<br>当两个CPU都缓存了<code>i = 0</code>的Block后，此时<code>A CPU</code>修改了i的值（写回策略，不会把值同步到内存中去），但此时<code>B CPU</code>中的还是1。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/cpu-cache/%E7%BC%93%E5%AD%98%E4%B8%80%E8%87%B4%E6%80%A7%E9%97%AE%E9%A2%98%E4%BE%8B%E5%AD%902.webp" alt="缓存一致性"></p>
+<p>要解决缓存一致性的问题，就需要一种机制，来同步两个不同核心里面的缓存数据，我们来看下实现该机制需要具备哪些能力。</p>
+<ul>
+<li><code>Write Propagation（写传播）</code>：某个CPU的数据更新是，必须要传播给其他核心的CPU</li>
+<li><code>Transaction Serialization（事务的串行话）</code>：某个CPU核心里对数据的操作，他其他核心中，顺序是要一样的。</li>
+</ul>
+<p>第一点写传播很容易理解，事务的串行化该怎么理解呢？假设有ABCD三个CPU，A离C近，B离D近，AC现在都要对i变量修改，A要将i改为100，B要将改为200。在传输速率一致的情况下，C先接收到A变更的信号，再接收B的，那么则看到的消息为i=100,i=200。D则与之相反，这里仔细发散去想会有很多问题。</p>
+<p>所以我们要保证事务的串行化，保证该机制需要做到以下两点：</p>
+<ul>
+<li>CPU对于Cache中数据的操作，需要同步给其他CPU核心。</li>
+<li>引入锁，如果两个CPU同时更新数据，只有拿到锁的CPU才可以更新数据。</li>
+</ul>
+<h3 id="总线嗅探"><a href="#总线嗅探" class="headerlink" title="总线嗅探"></a>总线嗅探</h3><p>不多介绍，类似观察者模式，每个CPU都观察其他CPU的数据变更，这样可以做到<code>Write Propagation（写传播）</code>但无法做到<code>Transaction Serialization（事务的串行化）</code>。</p>
+<h3 id="MESI协议（牛逼的来了）"><a href="#MESI协议（牛逼的来了）" class="headerlink" title="MESI协议（牛逼的来了）"></a>MESI协议（牛逼的来了）</h3><p>MESI协议基于总线嗅探机制，利用状态机实现了事务串行化，同时还降低了总线嗅探时信息传播的频率。</p>
+<p>MESI协议定义了Cache Line的四种状态，分别是<code>Modified（已修改）</code>、<code>Exclusive（独占）</code>、<code>Shared（共享）</code>、<code>Invalidated（失效）</code>。</p>
+<ul>
+<li><code>Modified</code>：还记得前面提过的写回吗，当CPU对CPU Cache的数据修改后，会为其添加脏标记，这里的脏标记即<code>Modified</code>状态</li>
+<li><code>Invalidated</code>：失效，这表示该CPU核心中的Cache Line已经失效了，不能直接使用。</li>
+<li><code>Shared</code>：此时<code>Block</code>与<code>Cache Line</code>的数据一致，且多个CPU核心都有该<code>Block</code>的缓存。</li>
+<li><code>Exclusive</code>：独占，此时<code>Block</code>与<code>Cache Line</code>的数据一致，且仅有一个CPU拥有该份数据。</li>
+</ul>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/cpu-cache/_MESI%E7%8A%B6%E6%80%81%E8%BD%AC%E6%8D%A2%E8%A1%A8%E6%A0%BC.webp" alt="MESI状态转换过程"></p>
+<p>上图描述一目了然。</p>
 
     </div>
 
@@ -314,7 +344,10 @@
     <a href="/2022/01/24/memory-hierarchy/" rel="prev" title="存储器结构层次">
       <i class="fa fa-chevron-left"></i> 存储器结构层次
     </a></div>
-      <div class="post-nav-item"></div>
+      <div class="post-nav-item">
+    <a href="/2022/01/27/how-to-the-cpu-execute-task/" rel="next" title="CPU是怎么执行任务的？">
+      CPU是怎么执行任务的？ <i class="fa fa-chevron-right"></i>
+    </a></div>
     </div>
       </footer>
     
@@ -373,7 +406,7 @@
 
       <!--noindex-->
       <div class="post-toc-wrap sidebar-panel">
-          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU-Cache%E7%9A%84%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E4%B8%8E%E8%AF%BB%E5%8F%96%E8%BF%87%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">CPU Cache的数据结构与读取过程</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9B%B4%E6%8E%A5%E6%98%A0%E5%B0%84Cache"><span class="nav-number">1.1.</span> <span class="nav-text">直接映射Cache</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%A8%E7%9B%B8%E8%BF%9ECache"><span class="nav-number">1.2.</span> <span class="nav-text">全相连Cache</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BB%84%E7%9B%B8%E8%BF%9ECache"><span class="nav-number">1.3.</span> <span class="nav-text">组相连Cache</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU-Cache%E7%9A%84%E6%95%B0%E6%8D%AE%E5%86%99%E5%85%A5%E8%BF%87%E7%A8%8B"><span class="nav-number">2.</span> <span class="nav-text">CPU Cache的数据写入过程</span></a></li></ol></div>
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU-Cache%E7%9A%84%E6%95%B0%E6%8D%AE%E7%BB%93%E6%9E%84%E4%B8%8E%E8%AF%BB%E5%8F%96%E8%BF%87%E7%A8%8B"><span class="nav-number">1.</span> <span class="nav-text">CPU Cache的数据结构与读取过程</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%9B%B4%E6%8E%A5%E6%98%A0%E5%B0%84Cache"><span class="nav-number">1.1.</span> <span class="nav-text">直接映射Cache</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E5%85%A8%E7%9B%B8%E8%BF%9ECache"><span class="nav-number">1.2.</span> <span class="nav-text">全相连Cache</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E7%BB%84%E7%9B%B8%E8%BF%9ECache"><span class="nav-number">1.3.</span> <span class="nav-text">组相连Cache</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU-Cache%E7%9A%84%E6%95%B0%E6%8D%AE%E5%86%99%E5%85%A5%E8%BF%87%E7%A8%8B"><span class="nav-number">2.</span> <span class="nav-text">CPU Cache的数据写入过程</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%BC%93%E5%AD%98%E4%B8%80%E8%87%B4%E6%80%A7%E9%97%AE%E9%A2%98"><span class="nav-number">3.</span> <span class="nav-text">缓存一致性问题</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%80%BB%E7%BA%BF%E5%97%85%E6%8E%A2"><span class="nav-number">3.1.</span> <span class="nav-text">总线嗅探</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#MESI%E5%8D%8F%E8%AE%AE%EF%BC%88%E7%89%9B%E9%80%BC%E7%9A%84%E6%9D%A5%E4%BA%86%EF%BC%89"><span class="nav-number">3.2.</span> <span class="nav-text">MESI协议（牛逼的来了）</span></a></li></ol></li></ol></div>
       </div>
       <!--/noindex-->
 
@@ -389,14 +422,14 @@
       <div class="site-state-item site-state-posts">
           <a href="/archives/">
         
-          <span class="site-state-item-count">5</span>
+          <span class="site-state-item-count">19</span>
           <span class="site-state-item-name">日志</span>
         </a>
       </div>
       <div class="site-state-item site-state-tags">
             <a href="/tags/">
           
-        <span class="site-state-item-count">6</span>
+        <span class="site-state-item-count">14</span>
         <span class="site-state-item-name">标签</span></a>
       </div>
   </nav>
@@ -437,12 +470,12 @@
     <span class="post-meta-item-icon">
       <i class="fa fa-chart-area"></i>
     </span>
-    <span title="站点总字数">14k</span>
+    <span title="站点总字数">50k</span>
     <span class="post-meta-divider">|</span>
     <span class="post-meta-item-icon">
       <i class="fa fa-coffee"></i>
     </span>
-    <span title="站点阅读时长">12 分钟</span>
+    <span title="站点阅读时长">46 分钟</span>
 </div>
 
         

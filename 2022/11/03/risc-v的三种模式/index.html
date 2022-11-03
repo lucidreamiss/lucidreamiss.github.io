@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png">
+  <link rel="mask-icon" href="/favicon.png" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+<link rel="stylesheet" href="//fonts.googleapis.com/css?family=Monda:300,300italic,400,400italic,700,700italic&display=swap&subset=latin,latin-ext">
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+  <link rel="stylesheet" href="/lib/pace/pace-theme-minimal.min.css">
+  <script src="/lib/pace/pace.min.js"></script>
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"lucidreamiss.github.io","root":"/","scheme":"Mist","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":true,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":true,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta property="og:type" content="article">
+<meta property="og:title" content="Risc-V的三种模式">
+<meta property="og:url" content="https://lucidreamiss.github.io/2022/11/03/risc-v%E7%9A%84%E4%B8%89%E7%A7%8D%E6%A8%A1%E5%BC%8F/index.html">
+<meta property="og:site_name" content="清明梦">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2022-11-03T06:39:59.000Z">
+<meta property="article:modified_time" content="2022-11-03T06:39:59.000Z">
+<meta property="article:author" content="涛桑">
+<meta property="article:tag" content="risc-v">
+<meta name="twitter:card" content="summary">
+
+<link rel="canonical" href="https://lucidreamiss.github.io/2022/11/03/risc-v%E7%9A%84%E4%B8%89%E7%A7%8D%E6%A8%A1%E5%BC%8F/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>Risc-V的三种模式 | 清明梦</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">清明梦</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">一起变好</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/11/03/risc-v%E7%9A%84%E4%B8%89%E7%A7%8D%E6%A8%A1%E5%BC%8F/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          Risc-V的三种模式
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-11-03 14:39:59" itemprop="dateCreated datePublished" datetime="2022-11-03T14:39:59+08:00">2022-11-03</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>3.8k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>3 分钟</span>
+            </span>
+            <div class="post-description">risc-v有三种运行模式，机器模式、管理模式、用户模式。今天我们来介绍下这三种模式，以及在xv6中使用的例子</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="机器模式（machine-mode）"><a href="#机器模式（machine-mode）" class="headerlink" title="机器模式（machine-mode）"></a>机器模式（machine-mode）</h2><p>机器模式（缩写为 M 模式，M-mode）是 RISC-V 中 hart（hardware thread，硬件线程）可以执行的最高权限模式。在 M 模式下运行的 hart 对内存，I/O 和一些对于启动和配置系统来说必要的底层功能有着完全的使用权。</p>
+<p>机器模式可以拦截并处理异常，异常被分为两类。一类是同步异常，指执行了无效操作码的指令，或者访问了无效的内存地址。另一类即是中断（软件中断硬件中断）。</p>
+<h3 id="机器模式下的异常处理"><a href="#机器模式下的异常处理" class="headerlink" title="机器模式下的异常处理"></a>机器模式下的异常处理</h3><p>八个控制状态寄存器（CSR）是机器模式下异常处理的必要部分：</p>
+<ul>
+<li><code>mtvec（Machine Trap Vector）</code>它保存发生异常时处理器需要跳转到的地址。</li>
+<li><code>mepc（Machine Exception PC）</code>它指向发生异常的指令。</li>
+<li><code>mcause（Machine Exception Cause）</code>它指示发生异常的种类。</li>
+<li><code>mie（Machine Interrupt Enable）</code>它指出目前哪些中断可以被处理。</li>
+<li><code>mip（Machine Interrupt Pending）</code>保存目前待处理的中断。</li>
+<li><code>mtval（Machine Trap Value）</code>它保存了陷入（trap）的附加信息：地址例外中出错的地址、发生非法指令例外的指令本身，对于其他异常，它的值为 0。</li>
+<li><code>mscratch（Machine Scratch）</code>它暂时存放一个字大小的数据。</li>
+<li><code>mstatus（Machine Status）</code>它保存全局中断开关，以及许多其他的状态，其中包括当前以哪种模式运行</li>
+</ul>
+<p>处理器在 M 模式下运行时，只有在全局中断开关 <code>mstatus.MIE=1</code>时才会产生中断.此外，每种类型中断在CSR<code>mie</code>中都有自己的开关。举个例子，xv6在最开始运行时，会在start.c中完成对时钟中断器的初始化。</p>
+<figure class="highlight c"><figcaption><span>xv6/kernel/start.c->timerinit()</span></figcaption><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br><span class="line">16</span><br><span class="line">17</span><br><span class="line">18</span><br><span class="line">19</span><br><span class="line">20</span><br><span class="line">21</span><br><span class="line">22</span><br><span class="line">23</span><br><span class="line">24</span><br><span class="line">25</span><br><span class="line">26</span><br><span class="line">27</span><br><span class="line">28</span><br><span class="line">29</span><br><span class="line">30</span><br><span class="line">31</span><br><span class="line">32</span><br><span class="line">33</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment">/**</span></span><br><span class="line"><span class="comment"> * 1. 将mstatus.MIE = 1， 打开了M模式的全局中断开关</span></span><br><span class="line"><span class="comment"> * 2. 将mie.MTIE = 1，   允许了M模式发生时钟中断异常</span></span><br><span class="line"><span class="comment"> */</span></span><br><span class="line"><span class="type">void</span> <span class="title function_">timerinit</span><span class="params">()</span> &#123;</span><br><span class="line">  </span><br><span class="line">  <span class="comment">// each CPU has a separate source of timer interrupts.</span></span><br><span class="line">  <span class="type">int</span> id = r_mhartid();</span><br><span class="line"></span><br><span class="line">  <span class="comment">// ask the CLINT for a timer interrupt.</span></span><br><span class="line">  <span class="type">int</span> interval = <span class="number">1000000</span>; <span class="comment">// cycles; about 1/10th second in qemu.</span></span><br><span class="line">  *(uint64*)CLINT_MTIMECMP(id) = *(uint64*)CLINT_MTIME + interval;</span><br><span class="line"></span><br><span class="line">  <span class="comment">// prepare information in scratch[] for timervec.</span></span><br><span class="line">  <span class="comment">// scratch[0..3] : space for timervec to save registers.</span></span><br><span class="line">  <span class="comment">// scratch[4] : address of CLINT MTIMECMP register.</span></span><br><span class="line">  <span class="comment">// scratch[5] : desired interval (in cycles) between timer interrupts.</span></span><br><span class="line">  <span class="comment">// 为时钟中断的中断处理函数timervec, 提供一些配置信息</span></span><br><span class="line">  uint64 *scratch = &amp;mscratch0[<span class="number">32</span> * id];</span><br><span class="line">  scratch[<span class="number">4</span>] = CLINT_MTIMECMP(id);</span><br><span class="line">  scratch[<span class="number">5</span>] = interval;</span><br><span class="line">  w_mscratch((uint64)scratch);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// set the machine-mode trap handler.</span></span><br><span class="line">  <span class="comment">// 机器模式下，发生中断时跳转的中断处理函数，在M模式下，仅处理时钟中断异常，所以入口直接设置成了时钟中断处理函数的地址。</span></span><br><span class="line">  w_mtvec((uint64)timervec);</span><br><span class="line">  <span class="comment">// IE-&gt;interrupt execption-&gt;中断异常</span></span><br><span class="line">  <span class="comment">// enable machine-mode interrupts.</span></span><br><span class="line">  w_mstatus(r_mstatus() | MSTATUS_MIE);</span><br><span class="line"></span><br><span class="line">  <span class="comment">// enable machine-mode timer interrupts.</span></span><br><span class="line">  w_mie(r_mie() | MIE_MTIE);</span><br><span class="line">&#125;</span><br></pre></td></tr></table></figure>
+
+<p>如果<code>timerinit()</code>初始化完成后，发生了时钟中断，那么此时寄存器<code>mip</code>的<code>MTIE</code>会置为1，那么此时就会发生中断。</p>
+<div class="note info">
+            <p>中断什么时候发生？当CPU执行一条指令前，他会去检查一下对应的中断寄存器，对应时钟中断，当检查到mip.MTIE = 1，即此时有一条时钟中断，且对应的mstatus.mie = 1 &amp;&amp; mie.MTIE = 1，那么此时就会发生时钟中断。</p>
+          </div>
+
+<p>在机器模式下，当CPU发生发生异常时，硬件会自动做出以下动作：</p>
+<ol>
+<li>发生异常指令的PC保存到CSR<code>mepc</code>中，并将PC设置为CSR<code>mtvec</code>的值</li>
+<li>根据异常来源设置CSR<code>mcause</code>，将mtval设置为设置为出错的地址或者其他特定的异常信息。</li>
+<li>将<code>mstatus.MIE</code>置为0，禁用全局中断，并将<code>mstatus.MIE</code>的值保存到<code>mstatus.MPIE</code>中</li>
+<li>将异常前的运行模式保存到<code>mstatus.MPP</code>中，并将运行模式切换到M模式。</li>
+</ol>
+<p>此时跳转到mtvec保存的地址中去执行，当返回时，需要依赖<code>mret</code>指令，执行mret执行将会执行上述步骤的逆操作，返回到原先发生异常的状态。</p>
+<h2 id="用户模式-（user-mode）"><a href="#用户模式-（user-mode）" class="headerlink" title="用户模式 （user-mode）"></a>用户模式 （user-mode）</h2><p>对于简单的嵌入式系统来说，机器模式就够了，而对于操作系统来说，上面运行这很多用户程序，需要保证用户程序间的内存相互隔离，以保证安全性，同时要禁止用户程序使用一些机器特权指令，例如mret等等。防止用户程序越界。</p>
+<p>用户代码必须被限制只能访问自己那部分内存。实现了 M 和 U 模式的处理器具有一个叫做物理内存保护（PMP，Physical Memory Protection）的功能，允许 M 模式指定 U 模式可以访问的内存地址。PMP 包括几个地址寄存器（通常为 8 到 16 个）和相应的配置寄存器。这些配置寄存器可以授予或拒绝读、写和执行权限。当处于 U 模式的处理器尝试取指或执行 load 或 store 操作时，将地址和所有的 PMP 地址寄存器比较。如果地址大于等于 PMP 地址 i，但小于 PMP 地址 i+1，则 PMP i+1 的配置寄存器决定该访问是否可以继续，如果不能将会引发访问异常。</p>
+<h2 id="管理模式（supervisor-mode）"><a href="#管理模式（supervisor-mode）" class="headerlink" title="管理模式（supervisor-mode）"></a>管理模式（supervisor-mode）</h2><p>上一节中描述的 PMP 方案对嵌入式系统的实现很有吸引力，因为它以相对较低的成本提供了内存保护，但它的一些缺点限制了它在通用计算中的使用。由于 PMP 仅支持固定数量的内存区域，因此无法对它进行扩展从而适应复杂的应用程序。而且由于这些区域必须在物理存储中连续，因此系统可能产生存储碎片化的问题。另外，PMP 不能有效地支持对辅存的分页。</p>
+<p>更复杂的 RISC-V 处理器用和几乎所有通用架构相同的方式处理这些问题：使用基于页面的虚拟内存。这个功能构成了监管者模式（S 模式）的核心，这是一种可选的权限模式，旨在支持现代类 Unix 操作系统，如 Linux，FreeBSD 和 Windows。S 模式比 U 模式权<br>限更高，但比 M 模式低。与 U 模式一样，S 模式下运行的软件不能使用 M 模式的 CSR 和指令，并且受到 PMP 的限制。本届介绍 S 模式的中断和异常，下一节将详细介绍 S 模式下的虚拟内存系统。</p>
+<p>默认情况下，发生所有异常（不论在什么权限模式下）的时候，控制权都会被移交到M 模式的异常处理程序。但是 Unix 系统中的大多数例外都应该进行 S 模式下的系统调用。M 模式的异常处理程序可以将异常重新导向 S 模式，但这些额外的操作会减慢大多数<br>异常的处理速度。因此，RISC-V 提供了一种异常委托机制。通过该机制可以选择性地将中断和同步异常交给 S 模式处理，而完全绕过 M 模式。</p>
+<p>mideleg（Machine Interrupt Delegation，机器中断委托）CSR 控制将哪些中断委托给 S模式。例如，mideleg[5]对应于 S 模式的时钟中断，如果把它置位，S 模式的时钟中断将会移交 S 模式的异常处理程序，而不是 M 模式的异常处理程序。</p>
+<p><code>sie</code>和<code>sip</code>在S模式下的作用等同于<code>mie</code>和<code>mip</code>在M模式下的作用。</p>
+<p>同样的，处理中断委托外，还有同步异常委托CSR medeleg（Machine Execption Delegation）。</p>
+<p>请注意，无论委派设置是怎样的，发生异常时控制权都不会移交给权限更低的模式。在 M 模式下发生的异常总是在 M 模式下处理。在 S 模式下发生的异常，根据具体的委派设置，可能由 M 模式或 S 模式处理，但永远不会由 U 模式处理。</p>
+<p>S 模式有几个异常处理 CSR：sepc、stvec、scause、sscratch、stval 和 sstatus，它们 M 模式 CSR 相同的功能。监管者异常返回指令 sret 与 mret 的行为相同，但它作用于 S 模式的异常处理 CSR，而不是 M 模式的 CSR。</p>
+<p>在管理模式下，当CPU发生发生异常时，硬件会自动做出以下动作：</p>
+<ol>
+<li>发生异常指令的PC保存到CSR<code>sepc</code>中，并将PC设置为CSR<code>stvec</code>的值</li>
+<li>根据异常来源设置CSR<code>scause</code>，将mtval设置为设置为出错的地址或者其他特定的异常信息。</li>
+<li>将<code>mstatus.SIE</code>置为0，禁用全局中断，并将<code>mstatus.SIE</code>的值保存到<code>mstatus.SPIE</code>中</li>
+<li>将异常前的运行模式保存到<code>mstatus.SPP</code>中，并将运行模式切换到S模式。</li>
+</ol>
+
+    </div>
+
+    
+    
+    
+
+    
+      <div>
+        <div>
+  
+    <div style="text-align:center;color:#bfbfbf;font-size:16px;">
+      <span>-------- 本文结束 </span>
+      <i class="fa fa-"></i>
+      <span> 感谢阅读 --------</span>
+    </div>
+  
+</div>
+      </div>
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/risc-v/" rel="tag"><i class="fa fa-tag"></i> risc-v</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/10/30/%E5%88%97%E4%B8%AA%E8%AE%A1%E5%88%92%E5%90%A7/" rel="prev" title="列个计划吧">
+      <i class="fa fa-chevron-left"></i> 列个计划吧
+    </a></div>
+      <div class="post-nav-item"></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#%E6%9C%BA%E5%99%A8%E6%A8%A1%E5%BC%8F%EF%BC%88machine-mode%EF%BC%89"><span class="nav-number">1.</span> <span class="nav-text">机器模式（machine-mode）</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E6%9C%BA%E5%99%A8%E6%A8%A1%E5%BC%8F%E4%B8%8B%E7%9A%84%E5%BC%82%E5%B8%B8%E5%A4%84%E7%90%86"><span class="nav-number">1.1.</span> <span class="nav-text">机器模式下的异常处理</span></a></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%94%A8%E6%88%B7%E6%A8%A1%E5%BC%8F-%EF%BC%88user-mode%EF%BC%89"><span class="nav-number">2.</span> <span class="nav-text">用户模式 （user-mode）</span></a></li><li class="nav-item nav-level-2"><a class="nav-link" href="#%E7%AE%A1%E7%90%86%E6%A8%A1%E5%BC%8F%EF%BC%88supervisor-mode%EF%BC%89"><span class="nav-number">3.</span> <span class="nav-text">管理模式（supervisor-mode）</span></a></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="涛桑"
+      src="/favicon.png">
+  <p class="site-author-name" itemprop="name">涛桑</p>
+  <div class="site-description" itemprop="description">黑夜与白天，与清明梦之间</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">19</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">14</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/lucidreamiss" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;lucidreamiss" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">清明梦</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="站点总字数">50k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="站点阅读时长">46 分钟</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/pangu@4/dist/browser/pangu.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<script src="/live2dw/lib/L2Dwidget.min.js?094cbace49a39548bed64abff5988b05"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"debug":false,"model":{"scale":1,"hHeadPos":0.5,"vHeadPos":0.618,"jsonPath":"/live2dw/assets/koharu.model.json"},"display":{"superSample":2,"hOffset":0,"vOffset":-40,"position":"right","width":150,"height":300},"mobile":{"show":false,"scale":0.2},"react":{"opacityDefault":0.5,"opacityOnHover":0.2},"log":false});</script></body>
+</html>

@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=2">
+<meta name="theme-color" content="#222">
+<meta name="generator" content="Hexo 5.4.2">
+  <link rel="apple-touch-icon" sizes="180x180" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon.png">
+  <link rel="mask-icon" href="/favicon.png" color="#222">
+
+<link rel="stylesheet" href="/css/main.css">
+
+<link rel="stylesheet" href="//fonts.googleapis.com/css?family=Monda:300,300italic,400,400italic,700,700italic&display=swap&subset=latin,latin-ext">
+<link rel="stylesheet" href="/lib/font-awesome/css/all.min.css">
+  <link rel="stylesheet" href="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.css">
+  <link rel="stylesheet" href="/lib/pace/pace-theme-minimal.min.css">
+  <script src="/lib/pace/pace.min.js"></script>
+
+<script id="hexo-configurations">
+    var NexT = window.NexT || {};
+    var CONFIG = {"hostname":"lucidreamiss.github.io","root":"/","scheme":"Mist","version":"7.8.0","exturl":false,"sidebar":{"position":"left","display":"post","padding":18,"offset":12,"onmobile":false},"copycode":{"enable":true,"show_result":true,"style":null},"back2top":{"enable":true,"sidebar":false,"scrollpercent":false},"bookmark":{"enable":false,"color":"#222","save":"auto"},"fancybox":true,"mediumzoom":false,"lazyload":false,"pangu":true,"comments":{"style":"tabs","active":null,"storage":true,"lazyload":true,"nav":null},"algolia":{"hits":{"per_page":10},"labels":{"input_placeholder":"Search for Posts","hits_empty":"We didn't find any results for the search: ${query}","hits_stats":"${hits} results found in ${time} ms"}},"localsearch":{"enable":true,"trigger":"auto","top_n_per_article":1,"unescape":false,"preload":false},"motion":{"enable":true,"async":false,"transition":{"post_block":"fadeIn","post_header":"slideDownIn","post_body":"slideDownIn","coll_header":"slideLeftIn","sidebar":"slideUpIn"}},"path":"search.xml"};
+  </script>
+
+  <meta property="og:type" content="article">
+<meta property="og:title" content="CPU是怎么执行任务的？">
+<meta property="og:url" content="https://lucidreamiss.github.io/2022/01/27/how-to-the-cpu-execute-task/index.html">
+<meta property="og:site_name" content="清明梦">
+<meta property="og:locale" content="zh_CN">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/CPU%E6%9E%B6%E6%9E%84.jpg">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/%E8%B0%83%E5%BA%A6%E7%B1%BB.webp">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/CPU%E9%98%9F%E5%88%97.webp">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/%E4%BC%98%E5%85%88%E7%BA%A7.webp">
+<meta property="og:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/%E6%9D%83%E9%87%8Dnice%E8%BD%AC%E6%8D%A2%E8%A1%A8.png">
+<meta property="article:published_time" content="2022-01-27T11:14:36.000Z">
+<meta property="article:modified_time" content="2022-01-27T11:14:36.000Z">
+<meta property="article:author" content="涛桑">
+<meta property="article:tag" content="操作系统">
+<meta property="article:tag" content="CPU">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:image" content="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/CPU%E6%9E%B6%E6%9E%84.jpg">
+
+<link rel="canonical" href="https://lucidreamiss.github.io/2022/01/27/how-to-the-cpu-execute-task/">
+
+
+<script id="page-configurations">
+  // https://hexo.io/docs/variables.html
+  CONFIG.page = {
+    sidebar: "",
+    isHome : false,
+    isPost : true,
+    lang   : 'zh-CN'
+  };
+</script>
+
+  <title>CPU是怎么执行任务的？ | 清明梦</title>
+  
+
+
+
+
+
+
+  <noscript>
+  <style>
+  .use-motion .brand,
+  .use-motion .menu-item,
+  .sidebar-inner,
+  .use-motion .post-block,
+  .use-motion .pagination,
+  .use-motion .comments,
+  .use-motion .post-header,
+  .use-motion .post-body,
+  .use-motion .collection-header { opacity: initial; }
+
+  .use-motion .site-title,
+  .use-motion .site-subtitle {
+    opacity: initial;
+    top: initial;
+  }
+
+  .use-motion .logo-line-before i { left: initial; }
+  .use-motion .logo-line-after i { right: initial; }
+  </style>
+</noscript>
+
+</head>
+
+<body itemscope itemtype="http://schema.org/WebPage">
+  <div class="container use-motion">
+    <div class="headband"></div>
+
+    <header class="header" itemscope itemtype="http://schema.org/WPHeader">
+      <div class="header-inner"><div class="site-brand-container">
+  <div class="site-nav-toggle">
+    <div class="toggle" aria-label="切换导航栏">
+      <span class="toggle-line toggle-line-first"></span>
+      <span class="toggle-line toggle-line-middle"></span>
+      <span class="toggle-line toggle-line-last"></span>
+    </div>
+  </div>
+
+  <div class="site-meta">
+
+    <a href="/" class="brand" rel="start">
+      <span class="logo-line-before"><i></i></span>
+      <h1 class="site-title">清明梦</h1>
+      <span class="logo-line-after"><i></i></span>
+    </a>
+      <p class="site-subtitle" itemprop="description">一起变好</p>
+  </div>
+
+  <div class="site-nav-right">
+    <div class="toggle popup-trigger">
+        <i class="fa fa-search fa-fw fa-lg"></i>
+    </div>
+  </div>
+</div>
+
+
+
+
+<nav class="site-nav">
+  <ul id="menu" class="main-menu menu">
+        <li class="menu-item menu-item-home">
+
+    <a href="/" rel="section"><i class="fa fa-home fa-fw"></i>首页</a>
+
+  </li>
+        <li class="menu-item menu-item-about">
+
+    <a href="/about/" rel="section"><i class="fa fa-user fa-fw"></i>关于</a>
+
+  </li>
+        <li class="menu-item menu-item-tags">
+
+    <a href="/tags/" rel="section"><i class="fa fa-tags fa-fw"></i>标签</a>
+
+  </li>
+        <li class="menu-item menu-item-categories">
+
+    <a href="/categories/" rel="section"><i class="fa fa-th fa-fw"></i>分类</a>
+
+  </li>
+        <li class="menu-item menu-item-archives">
+
+    <a href="/archives/" rel="section"><i class="fa fa-archive fa-fw"></i>归档</a>
+
+  </li>
+      <li class="menu-item menu-item-search">
+        <a role="button" class="popup-trigger"><i class="fa fa-search fa-fw"></i>搜索
+        </a>
+      </li>
+  </ul>
+</nav>
+
+
+
+  <div class="search-pop-overlay">
+    <div class="popup search-popup">
+        <div class="search-header">
+  <span class="search-icon">
+    <i class="fa fa-search"></i>
+  </span>
+  <div class="search-input-container">
+    <input autocomplete="off" autocapitalize="off"
+           placeholder="搜索..." spellcheck="false"
+           type="search" class="search-input">
+  </div>
+  <span class="popup-btn-close">
+    <i class="fa fa-times-circle"></i>
+  </span>
+</div>
+<div id="search-result">
+  <div id="no-result">
+    <i class="fa fa-spinner fa-pulse fa-5x fa-fw"></i>
+  </div>
+</div>
+
+    </div>
+  </div>
+
+</div>
+    </header>
+
+    
+  <div class="back-to-top">
+    <i class="fa fa-arrow-up"></i>
+    <span>0%</span>
+  </div>
+
+
+    <main class="main">
+      <div class="main-inner">
+        <div class="content-wrap">
+          
+
+          <div class="content post posts-expand">
+            
+
+    
+  
+  
+  <article itemscope itemtype="http://schema.org/Article" class="post-block" lang="zh-CN">
+    <link itemprop="mainEntityOfPage" href="https://lucidreamiss.github.io/2022/01/27/how-to-the-cpu-execute-task/">
+
+    <span hidden itemprop="author" itemscope itemtype="http://schema.org/Person">
+      <meta itemprop="image" content="/favicon.png">
+      <meta itemprop="name" content="涛桑">
+      <meta itemprop="description" content="黑夜与白天，与清明梦之间">
+    </span>
+
+    <span hidden itemprop="publisher" itemscope itemtype="http://schema.org/Organization">
+      <meta itemprop="name" content="清明梦">
+    </span>
+      <header class="post-header">
+        <h1 class="post-title" itemprop="name headline">
+          CPU是怎么执行任务的？
+        </h1>
+
+        <div class="post-meta">
+            <span class="post-meta-item">
+              <span class="post-meta-item-icon">
+                <i class="far fa-calendar"></i>
+              </span>
+              <span class="post-meta-item-text">发表于</span>
+
+              <time title="创建时间：2022-01-27 19:14:36" itemprop="dateCreated datePublished" datetime="2022-01-27T19:14:36+08:00">2022-01-27</time>
+            </span>
+
+          
+            <span class="post-meta-item" title="本文字数">
+              <span class="post-meta-item-icon">
+                <i class="far fa-file-word"></i>
+              </span>
+              <span>2.6k</span>
+            </span>
+            <span class="post-meta-item" title="阅读时长">
+              <span class="post-meta-item-icon">
+                <i class="far fa-clock"></i>
+              </span>
+              <span>2 分钟</span>
+            </span>
+            <div class="post-description">CPU通过不断的执行一条条指令来运行程序，那执行任务又该怎么理解呢，任务是什么？你知道CPU伪共享是什么意思吗？</div>
+
+        </div>
+      </header>
+
+    
+    
+    
+    <div class="post-body" itemprop="articleBody">
+
+      
+        <h2 id="CPU是如何读写数据的？"><a href="#CPU是如何读写数据的？" class="headerlink" title="CPU是如何读写数据的？"></a>CPU是如何读写数据的？</h2><p>先简单看下CPU的架构图：</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/CPU%E6%9E%B6%E6%9E%84.jpg" alt="CPU架构"></p>
+<p>一个CPU通常有多个CPU核心，每个核心又有自己L1 L2 CPU Cache，多个核心之间共享L3 CPU Cache，当缓存未命中后再去内存寻找，还没有则接着再去Disk层寻找，由上到下读写读写速度依次减慢。</p>
+<p>更多关于CPU与内存交互的文章：</p>
+<ul>
+<li><a href="/2022/01/24/memory-hierarchy/" title="存储器的层次结构">存储器的层次结构</a></li>
+<li><a href="/2022/01/25/cpu-cache/" title="CPU Cache 介绍">CPU Cache 介绍</a></li>
+</ul>
+<h3 id="什么是CPU伪共享"><a href="#什么是CPU伪共享" class="headerlink" title="什么是CPU伪共享"></a>什么是CPU伪共享</h3><p>伪共享的出现与CPU Cache的缓存机制脱不开关系，我们先看下CPU Cache是如何缓存数据的。<br>当CPU想要从内存读某个数据时，会先去CPU Cache寻找，若没有，CPU Cache则会把对应的内存数据缓存，而这里不会只缓存CPU需要的那一个数据，他会将相连范围的一小块数据都缓存下来。（为什么这样做呢？我们认为，与CPU刚刚使用过的数据所相邻的数据，很有可能会被CPU调用。缓存一整块数据可以减少CPU与内存直接交互的频率。）</p>
+<p>那我们来看下伪共享是什么，举个例子。</p>
+<p>假设有两个核心CPU在运行两个不同的线程，CPU A用到变量a，CPU B用到变量b，a和b在内存地址上相邻。</p>
+<ol>
+<li>A只修改a，B只修改b。</li>
+<li>A读取a，由于ab相邻，他俩都被缓存到了一个Cache Line中，<em>A Cache Line</em>此时状态为Exclusive。</li>
+<li>B读取b，由于ab相邻，也被缓存到了B的Cache Line中，此时<em>A Cache Line</em>与<em>B Cache Line</em>变为Shared。</li>
+<li>A修改a，此时<em>A Cache Line</em>变为Modified，而<em>B Cache Line</em>变为Invalidate。</li>
+<li>B修改b，因为B为Invalidate，则先通知A将数据写回到内存中，并变为Invalidate，B从内存中重新读取，并对b做修改，变为Modified。</li>
+</ol>
+<p>若上述4-5步骤交替重复的话，CPU Cache的机制便失效了，称其为伪共享。</p>
+<h4 id="怎么避免伪共享呢？"><a href="#怎么避免伪共享呢？" class="headerlink" title="怎么避免伪共享呢？"></a>怎么避免伪共享呢？</h4><p>其实很简单，对于可能位于多线程并被高频率修改的数据尽量使其独占一个Cache Line就可以了，即空间换时间的做法。</p>
+<p>Java Disruptor 的 RingBuffer也是这么做的，具体细节可自查。</p>
+<h2 id="CPU是如何选择线程的？"><a href="#CPU是如何选择线程的？" class="headerlink" title="CPU是如何选择线程的？"></a>CPU是如何选择线程的？</h2><p>在Linux内核中，线程与进程都是用<code>task_strcut</code>结构体表示的，所以CPU是如何执行任务的，任务其实就是指就是<code>task_strcut</code>。在Linux中，线程共享了进程已经创建的资源，包括内存地址空间、代码段、文件描述符，等等。所以Linux的线程又被称为轻量级进程。</p>
+<p>在Linux系统中，根据任务的优先级以及相应要求，分为以下两种：</p>
+<ul>
+<li>实时任务，优先级0~99，优先级很高。</li>
+<li>普通任务，优先级100~139，对响应的要求没那么高。</li>
+</ul>
+<h3 id="调度类"><a href="#调度类" class="headerlink" title="调度类"></a>调度类</h3><p>为了保障优先级高的任务尽可能的被执行，于是分了以下几种调度类：<br><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/%E8%B0%83%E5%BA%A6%E7%B1%BB.webp" alt="调度类"></p>
+<p><code>Deadline</code>与<code>Realtime</code>都用于实时任务，对任务执行有以下三种策略：</p>
+<ul>
+<li>SCHED_DEADLINE：距离deadline越近的任务越先执行。</li>
+<li>SCHED_FIFO：对于相同优先级的任务，按照先来先服务的原则，对应高优先级的任务，可以插队。</li>
+<li>SCHED_RR：对于相同优先级的任务，轮流着运行，每个任务都有一定的时间片，用完时间片后就被放到尾部，对于高优先级的任务，同理可插队。</li>
+</ul>
+<p>而 Fair 调度类是应用于普通任务，都是由 <code>CFS</code> 调度器管理的，分为两种调度策略：</p>
+<ul>
+<li>SCHED_NORMAL：普通任务使用的调度策略；</li>
+<li>SCHED_BATCH：后台任务的调度策略，不和终端进行交互，因此在不影响其他需要交互的任务，可以适当降低它的优先级。</li>
+</ul>
+<h3 id="CFS调度器（完全公平调度）"><a href="#CFS调度器（完全公平调度）" class="headerlink" title="CFS调度器（完全公平调度）"></a>CFS调度器（完全公平调度）</h3><p>对于普通任务来说，只有公平才是最重要的。Linux中，实现了一个基于CFS（Completely Fair Scheduling）的调度算法，也就是完全公平调度。<br>该算法的理念是让分配给每个任务的CPU时间相同，它为每个任务定义了一个虚拟运行时间，vruntime,如果一个任务在运行，且运行时间越久，该任务的vruntime自然越大，而没有被运行的任务，vruntime是不会变化的。<br>那么，在CFS算法调度中，会优先选择vruntime少的任务，以保证每个任务的公平性。<br>上面的选择方式保证了每个任务的公平性，但是没有考虑优先级的问题，这里又引入了权重值的概念，用来调整vruntime的大小。权重值越大，vruntime就会被调整的越小。这里有一条计算公式。</p>
+<blockquote>
+<p>vruntime（虚拟运行时间） = delta_exec（实际运行时间）* NICE_0_LOAD/权重<br>权重值是根据优先级转换得到的。</p>
+</blockquote>
+<h3 id="CPU运行队列"><a href="#CPU运行队列" class="headerlink" title="CPU运行队列"></a>CPU运行队列</h3><p>一个系统通常都会运行着很多任务，任务数量基本都远超核心数量，因此就需要排队。<br>事实上，每个CPU都有自己的运行队列（Run Queue，RQ），用于描述在此CPU上所运行的所有进程，其队列包含三个运行队列，Deadline（dl_rq）、Runtime（rt_rq）、CFS（cfs_rq）。其中cfs_<br>rq是用红黑树来描述的，按照vruntime大小排序，最左侧的叶子节点，就是下次会被调度的任务。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/CPU%E9%98%9F%E5%88%97.webp" alt="CPU队列"></p>
+<p>这三个队列的调度也是有优先级的，dl_rq &gt; rt_rq &gt; cfs_rq，实时任务总要比普通任务优先被执行。</p>
+<h3 id="调整优先级"><a href="#调整优先级" class="headerlink" title="调整优先级"></a>调整优先级</h3><p>如果我们启动一个任务的时候没有指定优先级，默认被认为是普通任务，放在cfs_rq中，有CFS调度器来进行管理。</p>
+<p>如果想要某个普通任务有更多的执行时间，可以调整任务的<code>nice</code>值，从而让优先级高的任务拥有更多的执行时间。<code>nice</code>值得设置范围为<code>-20 ~ 19</code>，值越低则优先级越高。</p>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/%E4%BC%98%E5%85%88%E7%BA%A7.webp" alt="nice值与优先级的映射"></p>
+<p>上图可以看到普通任务的优先级范围为100<del>139，nice值映射为-20</del>19。<br>在启动任务时，可以指定nice值</p>
+<figure class="highlight shell"><figcaption><span>linux</span></figcaption><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">nice -n -3 /usr/sbin/mysqld</span><br></pre></td></tr></table></figure>
+
+<p>也可以使用renice重新设置</p>
+<figure class="highlight shell"><figcaption><span>linux</span></figcaption><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">renice -n -10 /usr/sbin/mysqld</span><br></pre></td></tr></table></figure>
+
+<p>当你启动一个普通任务时，优先级的值可以认为固定为120，你可以使用<code>nice</code>来调整优先级</p>
+<blockquote>
+<p>优先级（新）= nice + 优先级（old）</p>
+</blockquote>
+<p>还记得前面的vruntime计算公式吗。</p>
+<blockquote>
+<p>vruntime（虚拟运行时间） = delta_exec（实际运行时间）* NICE_0_LOAD/权重<br>权重与nice值之间是有转换表的</p>
+</blockquote>
+<p><img src="https://lucidreamiss-blog-1310999690.cos.ap-chengdu.myqcloud.com/how-to-the-cpu-execute-task/%E6%9D%83%E9%87%8Dnice%E8%BD%AC%E6%8D%A2%E8%A1%A8.png" alt="权重nice转换表"></p>
+<blockquote>
+<p>weight = 1024 / 1.25nice</p>
+</blockquote>
+<p>每降低1nice值，将多获得10%CPU时间。</p>
+
+    </div>
+
+    
+    
+    
+
+    
+      <div>
+        <div>
+  
+    <div style="text-align:center;color:#bfbfbf;font-size:16px;">
+      <span>-------- 本文结束 </span>
+      <i class="fa fa-"></i>
+      <span> 感谢阅读 --------</span>
+    </div>
+  
+</div>
+      </div>
+    
+
+      <footer class="post-footer">
+          
+          <div class="post-tags">
+              <a href="/tags/%E6%93%8D%E4%BD%9C%E7%B3%BB%E7%BB%9F/" rel="tag"><i class="fa fa-tag"></i> 操作系统</a>
+              <a href="/tags/CPU/" rel="tag"><i class="fa fa-tag"></i> CPU</a>
+          </div>
+
+        
+
+
+        
+    <div class="post-nav">
+      <div class="post-nav-item">
+    <a href="/2022/01/25/cpu-cache/" rel="prev" title="CPU Cache">
+      <i class="fa fa-chevron-left"></i> CPU Cache
+    </a></div>
+      <div class="post-nav-item">
+    <a href="/2022/02/01/v-memory/" rel="next" title="虚拟内存学习笔记">
+      虚拟内存学习笔记 <i class="fa fa-chevron-right"></i>
+    </a></div>
+    </div>
+      </footer>
+    
+  </article>
+  
+  
+  
+
+
+
+          </div>
+          
+
+<script>
+  window.addEventListener('tabs:register', () => {
+    let { activeClass } = CONFIG.comments;
+    if (CONFIG.comments.storage) {
+      activeClass = localStorage.getItem('comments_active') || activeClass;
+    }
+    if (activeClass) {
+      let activeTab = document.querySelector(`a[href="#comment-${activeClass}"]`);
+      if (activeTab) {
+        activeTab.click();
+      }
+    }
+  });
+  if (CONFIG.comments.storage) {
+    window.addEventListener('tabs:click', event => {
+      if (!event.target.matches('.tabs-comment .tab-content .tab-pane')) return;
+      let commentClass = event.target.classList[1];
+      localStorage.setItem('comments_active', commentClass);
+    });
+  }
+</script>
+
+        </div>
+          
+  
+  <div class="toggle sidebar-toggle">
+    <span class="toggle-line toggle-line-first"></span>
+    <span class="toggle-line toggle-line-middle"></span>
+    <span class="toggle-line toggle-line-last"></span>
+  </div>
+
+  <aside class="sidebar">
+    <div class="sidebar-inner">
+
+      <ul class="sidebar-nav motion-element">
+        <li class="sidebar-nav-toc">
+          文章目录
+        </li>
+        <li class="sidebar-nav-overview">
+          站点概览
+        </li>
+      </ul>
+
+      <!--noindex-->
+      <div class="post-toc-wrap sidebar-panel">
+          <div class="post-toc motion-element"><ol class="nav"><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU%E6%98%AF%E5%A6%82%E4%BD%95%E8%AF%BB%E5%86%99%E6%95%B0%E6%8D%AE%E7%9A%84%EF%BC%9F"><span class="nav-number">1.</span> <span class="nav-text">CPU是如何读写数据的？</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E4%BB%80%E4%B9%88%E6%98%AFCPU%E4%BC%AA%E5%85%B1%E4%BA%AB"><span class="nav-number">1.1.</span> <span class="nav-text">什么是CPU伪共享</span></a><ol class="nav-child"><li class="nav-item nav-level-4"><a class="nav-link" href="#%E6%80%8E%E4%B9%88%E9%81%BF%E5%85%8D%E4%BC%AA%E5%85%B1%E4%BA%AB%E5%91%A2%EF%BC%9F"><span class="nav-number">1.1.1.</span> <span class="nav-text">怎么避免伪共享呢？</span></a></li></ol></li></ol></li><li class="nav-item nav-level-2"><a class="nav-link" href="#CPU%E6%98%AF%E5%A6%82%E4%BD%95%E9%80%89%E6%8B%A9%E7%BA%BF%E7%A8%8B%E7%9A%84%EF%BC%9F"><span class="nav-number">2.</span> <span class="nav-text">CPU是如何选择线程的？</span></a><ol class="nav-child"><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B0%83%E5%BA%A6%E7%B1%BB"><span class="nav-number">2.1.</span> <span class="nav-text">调度类</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#CFS%E8%B0%83%E5%BA%A6%E5%99%A8%EF%BC%88%E5%AE%8C%E5%85%A8%E5%85%AC%E5%B9%B3%E8%B0%83%E5%BA%A6%EF%BC%89"><span class="nav-number">2.2.</span> <span class="nav-text">CFS调度器（完全公平调度）</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#CPU%E8%BF%90%E8%A1%8C%E9%98%9F%E5%88%97"><span class="nav-number">2.3.</span> <span class="nav-text">CPU运行队列</span></a></li><li class="nav-item nav-level-3"><a class="nav-link" href="#%E8%B0%83%E6%95%B4%E4%BC%98%E5%85%88%E7%BA%A7"><span class="nav-number">2.4.</span> <span class="nav-text">调整优先级</span></a></li></ol></li></ol></div>
+      </div>
+      <!--/noindex-->
+
+      <div class="site-overview-wrap sidebar-panel">
+        <div class="site-author motion-element" itemprop="author" itemscope itemtype="http://schema.org/Person">
+    <img class="site-author-image" itemprop="image" alt="涛桑"
+      src="/favicon.png">
+  <p class="site-author-name" itemprop="name">涛桑</p>
+  <div class="site-description" itemprop="description">黑夜与白天，与清明梦之间</div>
+</div>
+<div class="site-state-wrap motion-element">
+  <nav class="site-state">
+      <div class="site-state-item site-state-posts">
+          <a href="/archives/">
+        
+          <span class="site-state-item-count">19</span>
+          <span class="site-state-item-name">日志</span>
+        </a>
+      </div>
+      <div class="site-state-item site-state-tags">
+            <a href="/tags/">
+          
+        <span class="site-state-item-count">14</span>
+        <span class="site-state-item-name">标签</span></a>
+      </div>
+  </nav>
+</div>
+  <div class="links-of-author motion-element">
+      <span class="links-of-author-item">
+        <a href="https://github.com/lucidreamiss" title="GitHub → https:&#x2F;&#x2F;github.com&#x2F;lucidreamiss" rel="noopener" target="_blank"><i class="fab fa-github fa-fw"></i>GitHub</a>
+      </span>
+  </div>
+
+
+
+      </div>
+
+    </div>
+  </aside>
+  <div id="sidebar-dimmer"></div>
+
+
+      </div>
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner">
+        
+
+        
+
+<div class="copyright">
+  
+  &copy; 
+  <span itemprop="copyrightYear">2022</span>
+  <span class="with-love">
+    <i class="fa fa-heart"></i>
+  </span>
+  <span class="author" itemprop="copyrightHolder">清明梦</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-chart-area"></i>
+    </span>
+    <span title="站点总字数">50k</span>
+    <span class="post-meta-divider">|</span>
+    <span class="post-meta-item-icon">
+      <i class="fa fa-coffee"></i>
+    </span>
+    <span title="站点阅读时长">46 分钟</span>
+</div>
+
+        
+
+
+
+
+
+
+
+
+      </div>
+    </footer>
+  </div>
+
+  
+  <script src="/lib/anime.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/jquery@3/dist/jquery.min.js"></script>
+  <script src="//cdn.jsdelivr.net/gh/fancyapps/fancybox@3/dist/jquery.fancybox.min.js"></script>
+  <script src="//cdn.jsdelivr.net/npm/pangu@4/dist/browser/pangu.min.js"></script>
+  <script src="/lib/velocity/velocity.min.js"></script>
+  <script src="/lib/velocity/velocity.ui.min.js"></script>
+
+<script src="/js/utils.js"></script>
+
+<script src="/js/motion.js"></script>
+
+
+<script src="/js/schemes/muse.js"></script>
+
+
+<script src="/js/next-boot.js"></script>
+
+
+
+
+  
+
+
+
+
+  
+<script src="/js/local-search.js"></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
+  
+
+<script src="/live2dw/lib/L2Dwidget.min.js?094cbace49a39548bed64abff5988b05"></script><script>L2Dwidget.init({"pluginRootPath":"live2dw/","pluginJsPath":"lib/","pluginModelPath":"assets/","tagMode":false,"debug":false,"model":{"scale":1,"hHeadPos":0.5,"vHeadPos":0.618,"jsonPath":"/live2dw/assets/koharu.model.json"},"display":{"superSample":2,"hOffset":0,"vOffset":-40,"position":"right","width":150,"height":300},"mobile":{"show":false,"scale":0.2},"react":{"opacityDefault":0.5,"opacityOnHover":0.2},"log":false});</script></body>
+</html>
